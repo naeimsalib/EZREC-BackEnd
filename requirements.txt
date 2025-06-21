@@ -1,6 +1,7 @@
+# == Core Application Dependencies ==
 python-dotenv==1.0.0
 
-# Supabase stack
+# == Supabase Stack ==
 supabase==2.3.5
 gotrue==2.9.1
 postgrest==0.15.1
@@ -8,12 +9,12 @@ storage3==0.7.7
 realtime==1.0.6
 supafunc==0.3.3
 
-# Carefully matched dependency
-httpx==0.23.3  # ✅ Do not use 0.25.x
-httpcore==0.16.3  # ✅ Required by httpx 0.23.3
+# Use the exact httpx version that supabase expects
+httpx==0.25.2
+httpcore==0.17.3
 h11==0.14.0
 
-# Camera + system
+# == System & Camera Dependencies ==
 opencv-python==4.8.1.78
 numpy==1.26.4
 psutil==5.9.4
