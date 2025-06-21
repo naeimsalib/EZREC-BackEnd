@@ -117,6 +117,8 @@ test_*.py
 *_test.py
 !test_camera_simple_fix.py
 !test_camera_comprehensive.py
+!test_camera_advanced.py
+!quick_camera_test.py
 
 # Backup files
 *.bak
