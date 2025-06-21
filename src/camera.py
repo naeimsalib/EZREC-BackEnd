@@ -21,9 +21,9 @@ from .utils import (
 )
 from .config import (
     CAMERA_ID,
-    CAMERA_WIDTH,
-    CAMERA_HEIGHT,
-    CAMERA_FPS,
+    RECORD_WIDTH,
+    RECORD_HEIGHT,
+    RECORD_FPS,
     RECORDING_DIR,
     TEMP_DIR,
     UPLOAD_INTERVAL,
@@ -56,9 +56,9 @@ class CameraService:
         """Initialize and start the camera using CameraInterface."""
         try:
             self.interface = CameraInterface(
-                width=CAMERA_WIDTH,
-                height=CAMERA_HEIGHT,
-                fps=CAMERA_FPS,
+                width=RECORD_WIDTH,
+                height=RECORD_HEIGHT,
+                fps=RECORD_FPS,
                 output_dir=TEMP_DIR
             )
             self.camera = self.interface  # for backward compatibility
