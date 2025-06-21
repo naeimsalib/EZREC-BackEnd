@@ -1,14 +1,14 @@
 # == Core Application Dependencies ==
 python-dotenv==1.0.0
 
-# == Supabase Stack (Pinned to resolve dependency conflicts) ==
+# == Supabase Stack (Compatible Versions) ==
 supabase==2.3.5
 gotrue==2.9.1
 postgrest==0.15.1
 storage3==0.7.7
 realtime==1.0.6
 supafunc==0.3.3
-httpx==0.23.3  # ✅ compatible version
+httpx==0.25.2  # ✅ Must be <0.26 to work with Supabase
 
 # == System & Camera Dependencies ==
 opencv-python==4.8.1.78
