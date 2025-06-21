@@ -2,6 +2,7 @@
 import time
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
+import pytz
 
 from .utils import logger, supabase, save_booking
 from .config import (
@@ -14,37 +15,49 @@ from .config import (
 def get_next_booking() -> Optional[Dict[str, Any]]:
     """Get the next upcoming booking for the user."""
     try:
-        now = datetime.utcnow()
-        end_time = now + timedelta(seconds=MAX_RECORDING_DURATION)
+        # We need to use timezone-aware objects to correctly query the database
+        now_utc = datetime.now(pytz.utc)
         
-        # Query Supabase for the next booking
-        response = supabase.table("bookings").select("*").eq(
-            "user_id", USER_ID
-        ).gte(
-            "end_time", now.isoformat()
-        ).lte(
-            "start_time", end_time.isoformat()
-        ).order(
-            "start_time"
-        ).limit(1).execute()
-        
+        # Query for bookings that are scheduled to start in the future but soon.
+        # This gives us a window to prepare for the recording.
+        # - 'start_time' must be greater than or equal to now.
+        # - 'start_time' should be within a reasonable future window (e.g., next 24 hours)
+        #   to avoid pulling bookings that are very far in the future.
+        future_limit = now_utc + timedelta(days=1)
+
+        response = (
+            supabase.table("bookings")
+            .select("*")
+            .eq("user_id", USER_ID)
+            .gte("start_time", now_utc.isoformat())
+            .lte("start_time", future_limit.isoformat())
+            .order("start_time", desc=False)
+            .limit(1)
+            .execute()
+        )
+
         if response.data:
             booking = response.data[0]
-            # Validate booking duration
-            start = datetime.fromisoformat(booking["start_time"])
-            end = datetime.fromisoformat(booking["end_time"])
-            duration = (end - start).total_seconds()
+            logger.info(f"Found upcoming booking: {booking['id']}")
             
+            # The booking times from Supabase are in UTC (ISO 8601 format)
+            start_utc = datetime.fromisoformat(booking["start_time"].replace("Z", "+00:00"))
+            end_utc = datetime.fromisoformat(booking["end_time"].replace("Z", "+00:00"))
+            duration = (end_utc - start_utc).total_seconds()
+
             if MIN_RECORDING_DURATION <= duration <= MAX_RECORDING_DURATION:
                 return booking
             else:
                 logger.warning(
-                    f"Booking {booking['id']} duration {duration}s outside allowed range"
+                    f"Booking {booking['id']} duration ({duration}s) is outside the "
+                    f"allowed range of {MIN_RECORDING_DURATION}-{MAX_RECORDING_DURATION}s."
                 )
+                return None
         
         return None
+
     except Exception as e:
-        logger.error(f"Failed to get next booking: {e}")
+        logger.error(f"Failed to get next booking: {e}", exc_info=True)
         return None
 
 def main():
