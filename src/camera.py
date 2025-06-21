@@ -26,7 +26,6 @@ from .config import (
     RECORD_FPS,
     RECORDING_DIR,
     TEMP_DIR,
-    UPLOAD_INTERVAL,
     MAX_RECORDING_DURATION
 )
 from .camera_interface import CameraInterface
