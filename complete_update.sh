@@ -206,8 +206,7 @@ case "$1" in
         cd "$APP_DIR"
         git pull
         echo "Updating Python dependencies..."
-        source venv/bin/activate
-        pip install -r requirements.txt
+        "$APP_DIR/venv/bin/pip" install -r "$APP_DIR/requirements.txt"
         echo "Restarting service..."
         sudo systemctl restart ezrec.service
         echo "Update complete!"
