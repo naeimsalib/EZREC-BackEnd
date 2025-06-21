@@ -38,6 +38,13 @@ echo "EZREC Backend - Final Update"
 echo "============================"
 echo ""
 
+# Install system dependencies for camera
+print_status "Installing system dependencies for camera (libcamera)..."
+apt-get update
+apt-get install -y libcamera-apps python3-libcamera
+print_info "✓ System dependencies installed."
+echo ""
+
 # Set the installation directory
 EXISTING_DIR="/home/michomanoly14892/code/SmartCam-Soccer/backend"
 SERVICE_USER="michomanoly14892"
