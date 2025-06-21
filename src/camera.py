@@ -398,8 +398,22 @@ class CameraService:
         self.stop_worker()
         
         if self.interface:
-            self.interface.release()
-            logger.info("Camera interface closed.")
+            try:
+                # This code is defensive. The recurring AttributeError suggests that
+                # an old version of the code might be running. This tries the
+                # correct `release()` method first, and falls back to `close()`
+                # to prevent crashing if the environment is stale.
+                if hasattr(self.interface, 'release'):
+                    self.interface.release()
+                    logger.info("Camera interface released successfully.")
+                elif hasattr(self.interface, 'close'):
+                    logger.warning("Interface has 'close' but not 'release'. Calling 'close' as a fallback.")
+                    self.interface.close()
+                    logger.info("Camera interface closed via fallback.")
+                else:
+                    logger.error("Camera interface has neither 'release' nor 'close' method.")
+            except Exception as e:
+                logger.error(f"Failed to cleanly close camera interface: {e}", exc_info=True)
             
         logger.info("CameraService stopped.")
 
