@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Optional, Tuple
 import subprocess
 import json
+import queue
 
 import cv2
 from .utils import (
@@ -48,7 +49,8 @@ class CameraService:
         self.upload_queue = self._load_upload_queue()
         self.file_booking_map = self._load_file_booking_map()
         self._start_upload_worker()
-        self._start_upload_worker_watchdog()
+        # The watchdog is problematic for graceful shutdowns, so it's disabled.
+        # self._start_upload_worker_watchdog()
         logger.info("[Upload Worker] Upload worker thread started at service init.")
 
     def start_camera(self) -> bool:
@@ -233,15 +235,20 @@ class CameraService:
             logger.debug(f"[Upload Worker] Watchdog: upload queue state: {self.upload_queue}")
 
     def _load_upload_queue(self):
+        # This method should return a queue object, not a list.
+        q = queue.Queue()
         if os.path.exists(self.upload_queue_file):
             try:
                 with open(self.upload_queue_file, "r") as f:
-                    queue = json.load(f)
-                logger.info(f"[Upload Worker] Loaded upload queue: {queue}")
-                return queue
+                    # Load the list of items from the file
+                    items = json.load(f)
+                    # Put each item into the queue
+                    for item in items:
+                        q.put(tuple(item)) # Assuming items are stored as lists/tuples
+                logger.info(f"[Upload Worker] Loaded {len(items)} items into upload queue.")
             except Exception as e:
                 logger.error(f"[Upload Worker] Failed to load upload queue: {e}")
-        return []
+        return q
 
     def _save_upload_queue(self):
         try:
@@ -274,7 +281,7 @@ class CameraService:
 
     def add_to_upload_queue(self, file_path, booking_id=None):
         logger.info(f"[Upload Worker] Adding file to upload queue: {file_path} (booking {booking_id})")
-        self.upload_queue.append((file_path, booking_id))
+        self.upload_queue.put((file_path, booking_id))
         self._save_upload_queue()
         if booking_id:
             self.file_booking_map[file_path] = booking_id
@@ -285,16 +292,20 @@ class CameraService:
     def upload_worker(self):
         """Upload worker thread that processes the upload queue."""
         logger.info("[Upload Worker] Upload worker running.")
-        while self.upload_worker_running:
-            with self.upload_queue_lock:
-                if not self.upload_queue:
-                    time.sleep(2)
-                    continue
-                file_path, booking_id = self.upload_queue.pop(0)
-                self._save_upload_queue()
-            
-            logger.info(f"[Upload Worker] Processing upload for: {file_path} (booking {booking_id})")
+        
+        while not self.stop_event.is_set():
             try:
+                # Use a timeout on get() to prevent it from blocking indefinitely.
+                # This allows the loop to check the stop_event periodically.
+                file_path, booking_id = self.upload_queue.get(timeout=1.0)
+                
+                # Check for the 'poison pill' (the signal to stop)
+                if file_path is None:
+                    logger.info("[Upload Worker] Received stop signal, exiting worker loop.")
+                    break
+                    
+                logger.info(f"[Upload Worker] Processing upload for: {file_path} (booking {booking_id})")
+                
                 if os.path.exists(file_path):
                     size = os.path.getsize(file_path)
                     logger.info(f"[Upload Worker] File exists, size: {size} bytes")
@@ -334,13 +345,18 @@ class CameraService:
                         except Exception as e:
                             logger.error(f"[Upload Worker] Upload failed for {file_path}: {e}", exc_info=True)
                             # Put the file back in the queue for retry
-                            self.upload_queue.append((file_path, booking_id))
+                            self.upload_queue.put((file_path, booking_id))
                             self._save_upload_queue()
                 else:
                     logger.error(f"[Upload Worker] File does not exist: {file_path}")
+            except queue.Empty:
+                # This is a normal occurrence when the queue is empty.
+                # The loop will just continue and check the stop_event again.
+                continue
             except Exception as e:
                 logger.error(f"[Upload Worker] Exception in upload_worker: {e}", exc_info=True)
-            time.sleep(1)
+                # Wait a moment before retrying to avoid spamming logs on persistent errors.
+                time.sleep(5)
 
     def remove_booking_for_file(self, file_path, booking_id=None):
         """Remove booking after successful upload."""
@@ -370,35 +386,50 @@ class CameraService:
         self._start_upload_worker()
 
     def start(self):
-        """Start the camera service."""
-        if not self.start_camera():
-            logger.error("Camera failed to start, upload worker will not run.")
-            return False
-        if self.upload_thread and self.upload_thread.is_alive():
-            logger.warning("Upload worker already running!")
-        else:
-            self.upload_thread = threading.Thread(target=self.upload_worker)
-            self.upload_thread.daemon = True
-            self.upload_thread.start()
-            logger.info("Upload worker thread started.")
-        logger.info("Camera service started")
-        return True
+        return self.start_camera()
 
     def stop(self):
-        """Stop the camera service."""
-        self.stop_event.set()
-        if self.upload_thread:
-            logger.info("Waiting for upload worker to stop...")
-            self.upload_thread.join()
+        """Stops the camera service and all background threads."""
+        logger.info("Stopping CameraService...")
         if self.is_recording:
             self.stop_recording()
+        
+        # Gracefully stop the upload worker first
+        self.stop_worker()
+        
         if self.interface:
-            self.interface.release()
-        cleanup_temp_files(TEMP_DIR)
-        logger.info("Camera service stopped")
+            self.interface.close()
+            logger.info("Camera interface closed.")
+            
+        logger.info("CameraService stopped.")
+
+    def stop_worker(self):
+        """Stops the upload worker thread gracefully."""
+        if not self.upload_worker_running:
+            logger.info("Upload worker is not running, no need to stop.")
+            return
+
+        logger.info("Stopping upload worker...")
+        self.stop_event.set()
+        
+        # Use a 'poison pill' to unblock the queue.get() call.
+        # This sends a special item that the worker loop knows means "stop".
+        try:
+            self.upload_queue.put((None, None))
+        except Exception:
+            # The queue might be full or closed, which is fine during shutdown.
+            pass
+            
+        if self.upload_worker_thread and self.upload_worker_thread.is_alive():
+            self.upload_worker_thread.join(timeout=10)
+            if self.upload_worker_thread.is_alive():
+                logger.warning("Upload worker thread did not stop within the 10-second timeout.")
+        
+        self.upload_worker_running = False
+        logger.info("Upload worker stopped.")
 
 def main():
-    """Main camera service loop using CameraInterface."""
+    """Test function for CameraService."""
     service = CameraService()
     if not service.start():
         return
