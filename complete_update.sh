@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# EZREC Backend - Complete Update Script
-# This script completes the interrupted update and fixes the .env file
+# EZREC Backend - Final Update Script
+# This script consolidates all services into a single one and fixes Python import errors.
 
 set -e
 
@@ -34,34 +34,41 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
-echo "EZREC Backend - Complete Update"
-echo "=============================="
+echo "EZREC Backend - Final Update"
+echo "============================"
 echo ""
 
 # Set the installation directory
 EXISTING_DIR="/home/michomanoly14892/code/SmartCam-Soccer/backend"
 SERVICE_USER="michomanoly14892"
 
-print_status "Completing update for: $EXISTING_DIR"
+print_status "Finalizing update for: $EXISTING_DIR"
 
-# Stop existing services first
-print_status "Stopping existing services..."
-systemctl stop smartcam.service 2>/dev/null || true
-systemctl stop smartcam-manager.service 2>/dev/null || true
-systemctl stop smartcam-status.service 2>/dev/null || true
-systemctl stop camera.service 2>/dev/null || true
-systemctl stop orchestrator.service 2>/dev/null || true
-systemctl stop scheduler.service 2>/dev/null || true
-
+# Stop and disable all old services first
+print_status "Stopping and disabling all old services..."
+systemctl stop ezrec-backend.service ezrec-orchestrator.service ezrec-scheduler.service ezrec-status.service 2>/dev/null || true
+systemctl disable ezrec-backend.service ezrec-orchestrator.service ezrec-scheduler.service ezrec-status.service 2>/dev/null || true
+systemctl stop smartcam.service smartcam-manager.service smartcam-status.service camera.service orchestrator.service scheduler.service zoomcam.service 2>/dev/null || true
+systemctl disable smartcam.service smartcam-manager.service smartcam-status.service camera.service orchestrator.service scheduler.service zoomcam.service 2>/dev/null || true
+print_info "All old services stopped and disabled."
 echo ""
 
-# Update .env file with missing variables
-print_status "Updating .env file with missing variables..."
+# Remove all old service files to ensure a clean slate
+print_status "Removing all old service files..."
+rm -f /etc/systemd/system/ezrec-*.service
+rm -f /etc/systemd/system/smartcam*.service
+rm -f /etc/systemd/system/camera.service
+rm -f /etc/systemd/system/orchestrator.service
+rm -f /etc/systemd/system/scheduler.service
+rm -f /etc/systemd/system/zoomcam.service
+print_info "Old service files removed."
+echo ""
 
-# Backup current .env
-cp "$EXISTING_DIR/.env" "$EXISTING_DIR/.env.backup.$(date +%Y%m%d_%H%M%S)"
+# Reload systemd to apply the removal
+systemctl daemon-reload
 
-# Create updated .env file
+# Update .env file
+print_status "Updating .env file..."
 cat > "$EXISTING_DIR/.env" << EOL
 # Supabase Configuration
 SUPABASE_URL=https://iszmsaayxpdrovealrrp.supabase.co
@@ -93,48 +100,15 @@ UPLOAD_DIR=$EXISTING_DIR/uploads
 DEBUG=true
 LOG_LEVEL=INFO
 EOL
-
-print_info "Updated .env file with all correct keys."
-
+print_info "✓ .env file is now correct."
 echo ""
 
-# Create necessary directories
-print_status "Creating necessary directories..."
-mkdir -p "$EXISTING_DIR/recordings"
-mkdir -p "$EXISTING_DIR/logs"
-mkdir -p "$EXISTING_DIR/temp"
-mkdir -p "$EXISTING_DIR/uploads"
-mkdir -p "$EXISTING_DIR/user_assets"
-
-echo ""
-
-# Update Python dependencies
-print_status "Updating Python dependencies..."
-cd "$EXISTING_DIR"
-
-if [ -d "venv" ]; then
-    source venv/bin/activate
-    pip install --upgrade pip
-    pip install -r requirements.txt
-    print_info "Updated existing virtual environment"
-else
-    python3 -m venv venv
-    source venv/bin/activate
-    pip install --upgrade pip
-    pip install -r requirements.txt
-    print_info "Created new virtual environment"
-fi
-
-echo ""
-
-# Create systemd services
-print_status "Creating systemd services..."
-
-cat > /etc/systemd/system/ezrec-backend.service << EOL
+# Create the single, unified systemd service
+print_status "Creating unified systemd service..."
+cat > /etc/systemd/system/ezrec.service << EOL
 [Unit]
-Description=EZREC Backend Service
+Description=EZREC Unified Backend Service
 After=network.target
-Wants=ezrec-orchestrator.service
 
 [Service]
 Type=simple
@@ -143,196 +117,99 @@ Group=$SERVICE_USER
 WorkingDirectory=$EXISTING_DIR
 Environment=PYTHONUNBUFFERED=1
 EnvironmentFile=$EXISTING_DIR/.env
-ExecStart=$EXISTING_DIR/venv/bin/python src/orchestrator_clean.py
+# Run the orchestrator as a module to fix import errors
+ExecStart=$EXISTING_DIR/venv/bin/python -m src.orchestrator_clean
 Restart=always
 RestartSec=10
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=ezrec-backend
+SyslogIdentifier=ezrec
 
 [Install]
 WantedBy=multi-user.target
 EOL
-
-cat > /etc/systemd/system/ezrec-orchestrator.service << EOL
-[Unit]
-Description=EZREC Orchestrator Service
-After=network.target
-PartOf=ezrec-backend.service
-
-[Service]
-Type=simple
-User=$SERVICE_USER
-Group=$SERVICE_USER
-WorkingDirectory=$EXISTING_DIR
-Environment=PYTHONUNBUFFERED=1
-EnvironmentFile=$EXISTING_DIR/.env
-ExecStart=$EXISTING_DIR/venv/bin/python src/orchestrator_clean.py
-Restart=always
-RestartSec=10
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=ezrec-orchestrator
-
-[Install]
-WantedBy=multi-user.target
-EOL
-
-cat > /etc/systemd/system/ezrec-scheduler.service << EOL
-[Unit]
-Description=EZREC Scheduler Service
-After=network.target
-PartOf=ezrec-backend.service
-
-[Service]
-Type=simple
-User=$SERVICE_USER
-Group=$SERVICE_USER
-WorkingDirectory=$EXISTING_DIR
-Environment=PYTHONUNBUFFERED=1
-EnvironmentFile=$EXISTING_DIR/.env
-ExecStart=$EXISTING_DIR/venv/bin/python src/scheduler.py
-Restart=always
-RestartSec=10
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=ezrec-scheduler
-
-[Install]
-WantedBy=multi-user.target
-EOL
-
-cat > /etc/systemd/system/ezrec-status.service << EOL
-[Unit]
-Description=EZREC Status Service
-After=network.target
-PartOf=ezrec-backend.service
-
-[Service]
-Type=simple
-User=$SERVICE_USER
-Group=$SERVICE_USER
-WorkingDirectory=$EXISTING_DIR
-Environment=PYTHONUNBUFFERED=1
-EnvironmentFile=$EXISTING_DIR/.env
-ExecStart=$EXISTING_DIR/venv/bin/python -c "from src.utils import update_system_status; import time; [update_system_status() or time.sleep(15) for _ in iter(int, 1)]"
-Restart=always
-RestartSec=10
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=ezrec-status
-
-[Install]
-WantedBy=multi-user.target
-EOL
-
+print_info "✓ Created ezrec.service"
 echo ""
 
-# Remove old service files
-print_status "Removing old service files..."
-rm -f /etc/systemd/system/smartcam.service
-rm -f /etc/systemd/system/smartcam-manager.service
-rm -f /etc/systemd/system/smartcam-status.service
-rm -f /etc/systemd/system/camera.service
-rm -f /etc/systemd/system/orchestrator.service
-rm -f /etc/systemd/system/scheduler.service
-rm -f /etc/systemd/system/zoomcam.service
-
-# Reload systemd
+# Reload systemd to recognize the new service
 systemctl daemon-reload
 
+# Enable and start the new service
+print_status "Enabling and starting the new service..."
+systemctl enable ezrec.service
+systemctl start ezrec.service
+print_info "✓ Service enabled and started."
 echo ""
 
-# Set permissions
-print_status "Setting permissions..."
-chown -R "$SERVICE_USER:$SERVICE_USER" "$EXISTING_DIR"
-chmod -R 755 "$EXISTING_DIR"
-chmod -R 777 "$EXISTING_DIR/temp" "$EXISTING_DIR/recordings" "$EXISTING_DIR/logs" "$EXISTING_DIR/uploads"
-
-echo ""
-
-# Enable and start new services
-print_status "Enabling and starting new services..."
-systemctl enable ezrec-backend.service
-systemctl enable ezrec-orchestrator.service
-systemctl enable ezrec-scheduler.service
-systemctl enable ezrec-status.service
-
-systemctl start ezrec-backend.service
-
-echo ""
-
-# Create management script
-print_status "Creating management script..."
+# Create the simplified management script
+print_status "Creating simplified management script..."
 cat > "$EXISTING_DIR/manage.sh" << 'EOL'
 #!/bin/bash
 # EZREC Backend Management Script
 
 APP_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-SERVICE_USER="michomanoly14892"
+
+# Ensure the script is run with sudo for service commands
+if [[ $EUID -ne 0 ]] && [[ "$1" == "start" || "$1" == "stop" || "$1" == "restart" ]]; then
+   echo "This command must be run with sudo." 
+   exit 1
+fi
 
 case "$1" in
     start)
-        echo "Starting EZREC Backend services..."
-        systemctl start ezrec-backend.service
+        echo "Starting EZREC Backend service..."
+        systemctl start ezrec.service
         ;;
     stop)
-        echo "Stopping EZREC Backend services..."
-        systemctl stop ezrec-backend.service
+        echo "Stopping EZREC Backend service..."
+        systemctl stop ezrec.service
         ;;
     restart)
-        echo "Restarting EZREC Backend services..."
-        systemctl restart ezrec-backend.service
+        echo "Restarting EZREC Backend service..."
+        systemctl restart ezrec.service
         ;;
     status)
         echo "EZREC Backend Service Status:"
-        systemctl status ezrec-backend.service --no-pager
-        echo ""
-        echo "All EZREC Services:"
-        systemctl status ezrec-*.service --no-pager
+        systemctl status ezrec.service --no-pager
         ;;
     logs)
-        echo "Showing recent logs..."
-        journalctl -u ezrec-backend.service -f
+        echo "Showing recent logs (-f for follow)..."
+        journalctl -u ezrec.service -n 50 --no-pager
         ;;
     health)
         echo "EZREC Backend Health Check"
         echo "========================="
         
-        # Check services
-        for service in ezrec-backend ezrec-orchestrator ezrec-scheduler ezrec-status; do
-            if systemctl is-active --quiet "$service.service"; then
-                echo "✓ $service.service is running"
-            else
-                echo "✗ $service.service is not running"
-            fi
-        done
-        
-        # Check disk space
-        usage=$(df "$APP_DIR" | tail -1 | awk '{print $5}' | sed 's/%//')
-        if [ "$usage" -lt 90 ]; then
-            echo "✓ Disk space OK: ${usage}% used"
+        # Check service
+        if systemctl is-active --quiet "ezrec.service"; then
+            echo "✓ EZREC Service is running"
         else
-            echo "✗ Disk space critical: ${usage}% used"
+            echo "✗ EZREC Service is NOT running"
         fi
         
+        # Check disk space
+        usage=$(df -h "$APP_DIR" | tail -1 | awk '{print $5}')
+        echo "✓ Disk space usage: ${usage}"
+        
         # Check camera
-        if v4l2-ctl --list-devices | grep -q "video"; then
+        if v4l2-ctl --list-devices 2>/dev/null | grep -q "video"; then
             echo "✓ Camera detected"
         else
             echo "✗ No camera detected"
         fi
         
         echo ""
-        echo "For detailed logs: journalctl -u ezrec-backend.service -f"
+        echo "For detailed logs: journalctl -u ezrec.service -f"
         ;;
     update)
         echo "Updating EZREC Backend..."
         cd "$APP_DIR"
         git pull
+        echo "Updating Python dependencies..."
         source venv/bin/activate
         pip install -r requirements.txt
-        systemctl restart ezrec-backend.service
+        echo "Restarting service..."
+        sudo systemctl restart ezrec.service
         echo "Update complete!"
         ;;
     *)
@@ -341,54 +218,32 @@ case "$1" in
         ;;
 esac
 EOL
-
 chmod +x "$EXISTING_DIR/manage.sh"
-
+chown "$SERVICE_USER:$SERVICE_USER" "$EXISTING_DIR/manage.sh"
+print_info "✓ Created manage.sh"
 echo ""
 
-# Create logrotate configuration
-print_status "Setting up log rotation..."
-cat > /etc/logrotate.d/ezrec-backend << EOL
-$EXISTING_DIR/logs/*.log {
-    daily
-    missingok
-    rotate 7
-    compress
-    delaycompress
-    notifempty
-    create 644 $SERVICE_USER $SERVICE_USER
-    postrotate
-        systemctl reload ezrec-backend.service
-    endscript
-}
-EOL
-
-echo ""
 
 # Final status check
 print_status "Final status check..."
 sleep 3
 
-if systemctl is-active --quiet ezrec-backend.service; then
-    print_status "✓ EZREC Backend service is running"
+if systemctl is-active --quiet ezrec.service; then
+    print_status "✓✓✓ EZREC Backend service is now running correctly! ✓✓✓"
 else
-    print_warning "✗ EZREC Backend service is not running"
-    print_info "Check logs: journalctl -u ezrec-backend.service -n 50"
+    print_error "✗✗✗ EZREC Backend service failed to start. ✗✗✗"
+    print_info "Please check the logs for errors:"
+    print_info "  sudo ./manage.sh logs"
 fi
 
 echo ""
 print_status "Update completed successfully!"
 echo ""
-print_info "Installation directory: $EXISTING_DIR"
+print_info "The entire system is now managed by the 'ezrec.service' and the 'manage.sh' script."
+print_info "All old services have been removed."
 echo ""
-print_info "Available commands:"
-echo "  sudo $EXISTING_DIR/manage.sh start"
-echo "  sudo $EXISTING_DIR/manage.sh stop"
-echo "  sudo $EXISTING_DIR/manage.sh restart"
-echo "  sudo $EXISTING_DIR/manage.sh status"
-echo "  sudo $EXISTING_DIR/manage.sh logs"
-echo "  sudo $EXISTING_DIR/manage.sh health"
-echo "  sudo $EXISTING_DIR/manage.sh update"
-echo ""
-print_warning "IMPORTANT: All keys have been updated. No manual .env edit is needed."
-echo "You can now manage the service with ./manage.sh" 
+print_info "Try these commands now:"
+echo "  sudo ./manage.sh status"
+echo "  sudo ./manage.sh health"
+echo "  sudo ./manage.sh logs"
+echo "" 
