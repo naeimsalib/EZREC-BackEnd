@@ -100,16 +100,10 @@ class EZRECOrchestrator:
                 now = datetime.now().astimezone()
                 
                 if booking:
-                    # Parse booking times with local timezone
-                    local_tz = now.tzinfo
-                    booking_date = datetime.strptime(booking["date"], "%Y-%m-%d").date()
-                    start_time = datetime.strptime(booking["start_time"], "%H:%M").time()
-                    end_time = datetime.strptime(booking["end_time"], "%H:%M").time()
-                    
-                    # Combine date and time with local timezone
-                    start_datetime = datetime.combine(booking_date, start_time).astimezone(local_tz)
-                    end_datetime = datetime.combine(booking_date, end_time).astimezone(local_tz)
-                    
+                    # Parse booking times directly from ISO 8601 format
+                    start_datetime = datetime.fromisoformat(booking["start_time"])
+                    end_datetime = datetime.fromisoformat(booking["end_time"])
+
                     time_until_start = (start_datetime - now).total_seconds()
                     time_since_end = (now - end_datetime).total_seconds()
                     
