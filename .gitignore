@@ -1,0 +1,121 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+venv/*
+!venv/.gitkeep
+env/
+ENV/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+log/
+
+# Media files
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.wmv
+*.flv
+*.webm
+
+# User assets
+user_assets/
+temp/
+recordings/
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Database
+*.sqlite3
+*.db
+
+# Media and large files
+media/
+uploads/
+
+# Temporary files
+*.tmp
+*.temp
+.coverage
+htmlcov/
+
+# Large library files
+*.so
+*.dylib
+*.dll
+*.lib
+*.a
+*.la
+*.lo
+*.def
+*.exp
+*.lib
+*.so.*
+*.dylib.*
+*.dll.*
+*.lib.*
+*.a.*
+*.la.*
+*.lo.*
+*.def.*
+*.exp.*
+*.lib.*
+
+# CUDA and PyTorch specific
+*.cu
+*.cuh
+*.pt
+*.pth
+*.onnx
+*.engine
+*.trt
+*.uff
+*.uff.*
+*.uff.*.*
+
+# Split files (if any)
+part_*
+
+# Test files
+test_*.py
+*_test.py
+
+# Backup files
+*.bak
+*.backup 

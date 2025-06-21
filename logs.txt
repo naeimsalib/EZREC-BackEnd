@@ -1,0 +1,78 @@
+michomanoly14892@raspberrypi:~/code/SmartCam-Soccer $ sudo journalctl -u smartcam.service -f
+Jun 19 18:32:41 raspberrypi smartcam[173457]: [ WARN:0@0.761] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 25
+Jun 19 18:32:41 raspberrypi smartcam[173457]: [ WARN:0@0.761] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=118, req=-2140645888
+Jun 19 18:32:41 raspberrypi smartcam[173457]: [ WARN:0@0.761] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 25
+Jun 19 18:32:41 raspberrypi smartcam[173457]: [ERROR:0@0.762] global obsensor_uvc_stream_channel.cpp:156 getStreamChannelGroup Camera index out of range
+Jun 19 18:32:41 raspberrypi smartcam[173457]: 2025-06-19 18:32:41 -0400 - ERROR - Failed to initialize CameraInterface: No working camera found (neither Pi Camera nor USB camera)
+Jun 19 18:32:42 raspberrypi smartcam[173457]: 2025-06-19 18:32:42 -0400 - INFO - HTTP Request: PATCH https://iszmsaayxpdrovealrrp.supabase.co/rest/v1/system_status?user_id=eq.65aa2e2a-e463-424d-b88f-0724bb0bea3a "HTTP/1.1 200 OK"
+Jun 19 18:32:42 raspberrypi smartcam[173457]: [Heartbeat] Sent successfully
+Jun 19 18:32:42 raspberrypi smartcam[173457]: 2025-06-19 18:32:42 -0400 - INFO - Camera closed successfully.
+Jun 19 18:32:42 raspberrypi systemd[1]: smartcam.service: Deactivated successfully.
+Jun 19 18:32:42 raspberrypi systemd[1]: smartcam.service: Consumed 1.217s CPU time.
+Jun 19 18:32:47 raspberrypi systemd[1]: smartcam.service: Scheduled restart job, restart counter is at 2.
+Jun 19 18:32:47 raspberrypi systemd[1]: Stopped smartcam.service - SmartCam Soccer Main Service.
+Jun 19 18:32:47 raspberrypi systemd[1]: smartcam.service: Consumed 1.217s CPU time.
+Jun 19 18:32:47 raspberrypi systemd[1]: Started smartcam.service - SmartCam Soccer Main Service.
+Jun 19 18:32:48 raspberrypi smartcam[173570]: [DEBUG] Picamera2 import succeeded
+Jun 19 18:32:48 raspberrypi smartcam[173570]: [DEBUG] Attempting to initialize Picamera2...
+Jun 19 18:32:48 raspberrypi smartcam[173570]: [4:20:54.554080145] [173570]  INFO Camera camera_manager.cpp:326 libcamera v0.5.0+59-d83ff0a4
+Jun 19 18:32:48 raspberrypi smartcam[173570]: [4:20:54.560932089] [173587]  INFO RPI pisp.cpp:720 libpisp version v1.2.1 981977ff21f3 29-04-2025 (14:13:50)
+Jun 19 18:32:48 raspberrypi smartcam[173570]: [4:20:54.570062724] [173587]  INFO RPI pisp.cpp:1179 Registered camera /base/axi/pcie@1000120000/rp1/i2c@80000/imx477@1a to CFE device /dev/media0 and ISP device /dev/media1 using PiSP variant BCM2712_D0
+Jun 19 18:32:48 raspberrypi smartcam[173570]: 2025-06-19 18:32:48 -0400 - INFO - Initialization successful.
+Jun 19 18:32:48 raspberrypi smartcam[173570]: 2025-06-19 18:32:48 -0400 - INFO - Camera now open.
+Jun 19 18:32:48 raspberrypi smartcam[173570]: 2025-06-19 18:32:48 -0400 - INFO - Camera configuration has been adjusted!
+Jun 19 18:32:48 raspberrypi smartcam[173570]: [4:20:54.579355730] [173570]  INFO Camera camera.cpp:1205 configuring streams: (0) 640x480-RGB888 (1) 2028x1520-BGGR_PISP_COMP1
+Jun 19 18:32:48 raspberrypi smartcam[173570]: [4:20:54.579457952] [173587]  INFO RPI pisp.cpp:1483 Sensor: /base/axi/pcie@1000120000/rp1/i2c@80000/imx477@1a - Selected sensor format: 2028x1520-SBGGR12_1X12 - Selected CFE format: 2028x1520-PC1B
+Jun 19 18:32:48 raspberrypi smartcam[173570]: 2025-06-19 18:32:48 -0400 - INFO - Configuration successful!
+Jun 19 18:32:49 raspberrypi smartcam[173570]: 2025-06-19 18:32:49 -0400 - INFO - Camera started
+Jun 19 18:32:49 raspberrypi smartcam[173570]: [CameraInterface] Using Pi Camera (Picamera2)
+Jun 19 18:32:49 raspberrypi smartcam[173570]: 2025-06-19 18:32:49 -0400 - INFO - SUCCESS: Camera initialized and opened with CameraInterface (picamera2)
+Jun 19 18:32:49 raspberrypi smartcam[173570]: 2025-06-19 18:32:49 -0400 - INFO - HTTP Request: PATCH https://iszmsaayxpdrovealrrp.supabase.co/rest/v1/system_status?user_id=eq.65aa2e2a-e463-424d-b88f-0724bb0bea3a "HTTP/1.1 200 OK"
+Jun 19 18:32:49 raspberrypi smartcam[173570]: [Heartbeat] Sent successfully
+Jun 19 18:32:49 raspberrypi smartcam[173570]: 2025-06-19 18:32:49 -0400 - INFO - HTTP Request: POST https://iszmsaayxpdrovealrrp.supabase.co/rest/v1/cameras "HTTP/1.1 200 OK"
+Jun 19 18:32:49 raspberrypi smartcam[173570]: 2025-06-19 18:32:49 -0400 - INFO - HTTP Request: PATCH https://iszmsaayxpdrovealrrp.supabase.co/rest/v1/system_status?user_id=eq.65aa2e2a-e463-424d-b88f-0724bb0bea3a "HTTP/1.1 200 OK"
+Jun 19 18:32:49 raspberrypi smartcam[173570]: [Heartbeat] Sent successfully
+Jun 19 18:32:49 raspberrypi smartcam[173570]: 2025-06-19 18:32:49 -0400 - INFO - HTTP Request: GET https://iszmsaayxpdrovealrrp.supabase.co/rest/v1/bookings?select=%2A&user_id=eq.65aa2e2a-e463-424d-b88f-0724bb0bea3a&date=eq.2025-06-19&end_time=gte.18%3A32&order=start_time "HTTP/1.1 200 OK"
+Jun 19 18:32:49 raspberrypi smartcam[173570]: 2025-06-19 18:32:49 -0400 - INFO - HTTP Request: GET https://iszmsaayxpdrovealrrp.supabase.co/rest/v1/bookings?select=%2A&user_id=eq.65aa2e2a-e463-424d-b88f-0724bb0bea3a&date=gt.2025-06-19&order=date&order=start_time "HTTP/1.1 200 OK"
+Jun 19 18:32:49 raspberrypi smartcam[173570]: 2025-06-19 18:32:49 -0400 - INFO - HTTP Request: POST https://iszmsaayxpdrovealrrp.supabase.co/rest/v1/cameras "HTTP/1.1 200 OK"
+Jun 19 18:32:49 raspberrypi smartcam[173570]: 2025-06-19 18:32:49 -0400 - INFO - HTTP Request: GET https://iszmsaayxpdrovealrrp.supabase.co/rest/v1/user_settings?select=%2A&user_id=eq.65aa2e2a-e463-424d-b88f-0724bb0bea3a "HTTP/1.1 200 OK"
+Jun 19 18:33:04 raspberrypi smartcam[173570]: 2025-06-19 18:33:04 -0400 - INFO - HTTP Request: POST https://iszmsaayxpdrovealrrp.supabase.co/rest/v1/cameras "HTTP/1.1 200 OK"
+Jun 19 18:33:09 raspberrypi smartcam[173570]: 2025-06-19 18:33:09 -0400 - INFO - HTTP Request: PATCH https://iszmsaayxpdrovealrrp.supabase.co/rest/v1/system_status?user_id=eq.65aa2e2a-e463-424d-b88f-0724bb0bea3a "HTTP/1.1 200 OK"
+Jun 19 18:33:09 raspberrypi smartcam[173570]: [Heartbeat] Sent successfully
+Jun 19 18:33:19 raspberrypi smartcam[173570]: 2025-06-19 18:33:19 -0400 - INFO - HTTP Request: POST https://iszmsaayxpdrovealrrp.supabase.co/rest/v1/cameras "HTTP/1.1 200 OK"
+Jun 19 18:33:29 raspberrypi smartcam[173570]: 2025-06-19 18:33:29 -0400 - INFO - HTTP Request: PATCH https://iszmsaayxpdrovealrrp.supabase.co/rest/v1/system_status?user_id=eq.65aa2e2a-e463-424d-b88f-0724bb0bea3a "HTTP/1.1 200 OK"
+Jun 19 18:33:29 raspberrypi smartcam[173570]: [Heartbeat] Sent successfully
+Jun 19 18:33:34 raspberrypi smartcam[173570]: 2025-06-19 18:33:34 -0400 - INFO - HTTP Request: POST https://iszmsaayxpdrovealrrp.supabase.co/rest/v1/cameras "HTTP/1.1 200 OK"
+Jun 19 18:33:49 raspberrypi smartcam[173570]: 2025-06-19 18:33:49 -0400 - INFO - HTTP Request: GET https://iszmsaayxpdrovealrrp.supabase.co/rest/v1/bookings?select=%2A&user_id=eq.65aa2e2a-e463-424d-b88f-0724bb0bea3a&date=eq.2025-06-19&end_time=gte.18%3A33&order=start_time "HTTP/1.1 200 OK"
+Jun 19 18:33:49 raspberrypi smartcam[173570]: 2025-06-19 18:33:49 -0400 - INFO - HTTP Request: GET https://iszmsaayxpdrovealrrp.supabase.co/rest/v1/bookings?select=%2A&user_id=eq.65aa2e2a-e463-424d-b88f-0724bb0bea3a&date=gt.2025-06-19&order=date&order=start_time "HTTP/1.1 200 OK"
+Jun 19 18:33:49 raspberrypi smartcam[173570]: 2025-06-19 18:33:49 -0400 - INFO - SUCCESS: Starting recording for booking: [{'id': '8e37b5ab-48c4-463b-bce0-d0afd7f68a76', 'date': '2025-06-19', 'start_time': '18:34', 'end_time': '18:35', 'created_at': '2025-06-19T22:33:07.049348+00:00', 'user_id': '65aa2e2a-e463-424d-b88f-0724bb0bea3a'}]
+Jun 19 18:33:49 raspberrypi smartcam[173570]: [CameraInterface] Preparing to start recording: temp/recording_20250619_183349.mp4
+Jun 19 18:33:50 raspberrypi smartcam[173570]: 2025-06-19 18:33:50 -0400 - INFO - HTTP Request: PATCH https://iszmsaayxpdrovealrrp.supabase.co/rest/v1/system_status?user_id=eq.65aa2e2a-e463-424d-b88f-0724bb0bea3a "HTTP/1.1 200 OK"
+Jun 19 18:33:50 raspberrypi smartcam[173570]: [Heartbeat] Sent successfully
+Jun 19 18:33:50 raspberrypi smartcam[173570]: 2025-06-19 18:33:50 -0400 - INFO - HTTP Request: POST https://iszmsaayxpdrovealrrp.supabase.co/rest/v1/cameras "HTTP/1.1 200 OK"
+Jun 19 18:33:50 raspberrypi smartcam[173570]: 2025-06-19 18:33:50 -0400 - INFO - Camera status updated: recording=True
+Jun 19 18:33:50 raspberrypi smartcam[173570]: 2025-06-19 18:33:50 -0400 - INFO - HTTP Request: POST https://iszmsaayxpdrovealrrp.supabase.co/rest/v1/system_status "HTTP/1.1 201 Created"
+Jun 19 18:33:50 raspberrypi smartcam[173570]: 2025-06-19 18:33:50 -0400 - INFO - System status updated: memory=7.1%, cpu=7.4%, storage=0
+Jun 19 18:33:50 raspberrypi smartcam[173570]: [CameraInterface] Started recording: temp/recording_20250619_183349.mp4
+Jun 19 18:33:50 raspberrypi smartcam[173570]: 2025-06-19 18:33:50 -0400 - INFO - HTTP Request: PATCH https://iszmsaayxpdrovealrrp.supabase.co/rest/v1/system_status?user_id=eq.65aa2e2a-e463-424d-b88f-0724bb0bea3a "HTTP/1.1 200 OK"
+Jun 19 18:33:50 raspberrypi smartcam[173570]: [Heartbeat] Sent successfully
+Jun 19 18:33:50 raspberrypi smartcam[173570]: 2025-06-19 18:33:50 -0400 - INFO - HTTP Request: POST https://iszmsaayxpdrovealrrp.supabase.co/rest/v1/cameras "HTTP/1.1 200 OK"
+Jun 19 18:34:05 raspberrypi smartcam[173570]: 2025-06-19 18:34:05 -0400 - INFO - HTTP Request: POST https://iszmsaayxpdrovealrrp.supabase.co/rest/v1/cameras "HTTP/1.1 200 OK"
+Jun 19 18:34:10 raspberrypi smartcam[173570]: 2025-06-19 18:34:10 -0400 - INFO - HTTP Request: PATCH https://iszmsaayxpdrovealrrp.supabase.co/rest/v1/system_status?user_id=eq.65aa2e2a-e463-424d-b88f-0724bb0bea3a "HTTP/1.1 200 OK"
+Jun 19 18:34:10 raspberrypi smartcam[173570]: [Heartbeat] Sent successfully
+Jun 19 18:34:20 raspberrypi smartcam[173570]: 2025-06-19 18:34:20 -0400 - INFO - HTTP Request: POST https://iszmsaayxpdrovealrrp.supabase.co/rest/v1/cameras "HTTP/1.1 200 OK"
+Jun 19 18:34:30 raspberrypi smartcam[173570]: 2025-06-19 18:34:30 -0400 - INFO - HTTP Request: PATCH https://iszmsaayxpdrovealrrp.supabase.co/rest/v1/system_status?user_id=eq.65aa2e2a-e463-424d-b88f-0724bb0bea3a "HTTP/1.1 200 OK"
+Jun 19 18:34:30 raspberrypi smartcam[173570]: [Heartbeat] Sent successfully
+Jun 19 18:34:36 raspberrypi smartcam[173570]: 2025-06-19 18:34:35 -0400 - INFO - HTTP Request: POST https://iszmsaayxpdrovealrrp.supabase.co/rest/v1/cameras "HTTP/1.1 200 OK"
+Jun 19 18:34:49 raspberrypi smartcam[173570]: 2025-06-19 18:34:49 -0400 - INFO - HTTP Request: GET https://iszmsaayxpdrovealrrp.supabase.co/rest/v1/bookings?select=%2A&user_id=eq.65aa2e2a-e463-424d-b88f-0724bb0bea3a&date=eq.2025-06-19&end_time=gte.18%3A34&order=start_time "HTTP/1.1 200 OK"
+Jun 19 18:34:49 raspberrypi smartcam[173570]: 2025-06-19 18:34:49 -0400 - INFO - HTTP Request: GET https://iszmsaayxpdrovealrrp.supabase.co/rest/v1/bookings?select=%2A&user_id=eq.65aa2e2a-e463-424d-b88f-0724bb0bea3a&date=gt.2025-06-19&order=date&order=start_time "HTTP/1.1 200 OK"
+Jun 19 18:34:50 raspberrypi smartcam[173570]: 2025-06-19 18:34:50 -0400 - INFO - HTTP Request: PATCH https://iszmsaayxpdrovealrrp.supabase.co/rest/v1/system_status?user_id=eq.65aa2e2a-e463-424d-b88f-0724bb0bea3a "HTTP/1.1 200 OK"
+Jun 19 18:34:50 raspberrypi smartcam[173570]: [Heartbeat] Sent successfully
+Jun 19 18:34:50 raspberrypi smartcam[173570]: 2025-06-19 18:34:50 -0400 - INFO - HTTP Request: POST https://iszmsaayxpdrovealrrp.supabase.co/rest/v1/cameras "HTTP/1.1 200 OK"
+Jun 19 18:35:06 raspberrypi smartcam[173570]: 2025-06-19 18:35:06 -0400 - INFO - HTTP Request: POST https://iszmsaayxpdrovealrrp.supabase.co/rest/v1/cameras "HTTP/1.1 200 OK"
+Jun 19 18:35:11 raspberrypi smartcam[173570]: 2025-06-19 18:35:11 -0400 - INFO - HTTP Request: PATCH https://iszmsaayxpdrovealrrp.supabase.co/rest/v1/system_status?user_id=eq.65aa2e2a-e463-424d-b88f-0724bb0bea3a "HTTP/1.1 200 OK"
+Jun 19 18:35:11 raspberrypi smartcam[173570]: [Heartbeat] Sent successfully
+Jun 19 18:35:21 raspberrypi smartcam[173570]: 2025-06-19 18:35:21 -0400 - INFO - HTTP Request: POST https://iszmsaayxpdrovealrrp.supabase.co/rest/v1/cameras "HTTP/1.1 200 OK"
+Jun 19 18:35:31 raspberrypi smartcam[173570]: 2025-06-19 18:35:31 -0400 - INFO - HTTP Request: PATCH https://iszmsaayxpdrovealrrp.supabase.co/rest/v1/system_status?user_id=eq.65aa2e2a-e463-424d-b88f-0724bb0bea3a "HTTP/1.1 200 OK"
+Jun 19 18:35:31 raspberrypi smartcam[173570]: [Heartbeat] Sent successfully
+Jun 19 18:35:36 raspberrypi smartcam[173570]: 2025-06-19 18:35:36 -0400 - INFO - HTTP Request: POST https://iszmsaayxpdrovealrrp.supabase.co/rest/v1/cameras "HTTP/1.1 200 OK"

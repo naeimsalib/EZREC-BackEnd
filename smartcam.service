@@ -1,0 +1,14 @@
+[Unit]
+Description=SmartCam Soccer Backend Service
+After=network.target
+
+[Service]
+Type=simple
+User=michomanoly14892
+WorkingDirectory=/home/michomanoly14892/code/SmartCam-Soccer
+ExecStart=/home/michomanoly14892/code/SmartCam-Soccer/backend/venv/bin/python /home/michomanoly14892/code/SmartCam-Soccer/backend/src/orchestrator.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target 
