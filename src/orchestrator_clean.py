@@ -132,12 +132,14 @@ class EZRECOrchestrator:
                     self.stop_recording()
                     last_booking_id = None
                 
-                time.sleep(5)  # Check every 5 seconds
+                if self.stop_event.wait(5):  # Check every 5 seconds
+                    break
                 
             except Exception as e:
                 logger.error(f"Error in recording worker: {e}", exc_info=True)
                 self.recording_errors += 1
-                time.sleep(5)
+                if self.stop_event.wait(5):
+                    break
 
     def status_worker(self):
         """Background thread for updating system status."""
@@ -149,10 +151,13 @@ class EZRECOrchestrator:
                     storage_used=get_storage_used(),
                     recording_errors=self.recording_errors
                 )
-                time.sleep(STATUS_UPDATE_INTERVAL)
+                # Use wait() instead of sleep() for graceful shutdown
+                if self.stop_event.wait(STATUS_UPDATE_INTERVAL):
+                    break
             except Exception as e:
                 logger.error(f"Error in status worker: {e}", exc_info=True)
-                time.sleep(30)  # Wait longer on error
+                if self.stop_event.wait(30): # Wait longer on error
+                    break
 
     def scheduler_worker(self):
         """Background thread for checking upcoming bookings."""
@@ -169,11 +174,14 @@ class EZRECOrchestrator:
                     else:
                         logger.error("Failed to save booking information")
                 
-                time.sleep(BOOKING_CHECK_INTERVAL)
+                # Use wait() instead of sleep() for graceful shutdown
+                if self.stop_event.wait(BOOKING_CHECK_INTERVAL):
+                    break
                 
             except Exception as e:
                 logger.error(f"Error in scheduler worker: {e}", exc_info=True)
-                time.sleep(30)  # Wait longer on error
+                if self.stop_event.wait(30): # Wait longer on error
+                    break
 
     def _save_booking(self, booking: Dict[str, Any]) -> bool:
         """Save booking information to local storage."""
