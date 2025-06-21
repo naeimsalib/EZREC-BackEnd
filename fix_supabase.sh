@@ -12,14 +12,15 @@ source venv/bin/activate
 echo "Uninstalling all conflicting packages..."
 pip uninstall -y supabase gotrue httpx supafunc storage3 postgrest httpcore h11
 
-echo "Installing latest compatible versions..."
-pip install httpx==0.25.2
-pip install httpcore==1.0.9
-pip install h11==0.16.0
-pip install supabase==2.3.5
+echo "Installing known working combination..."
+pip install httpx==0.24.1
+pip install httpcore==0.17.3
+pip install h11==0.14.0
+pip install gotrue==1.3.1
+pip install postgrest==0.10.8
+pip install storage3==0.5.3
 pip install supafunc==0.3.3
-pip install storage3==0.7.7
-pip install postgrest==0.15.1
+pip install supabase==1.0.3
 
 echo "Testing Supabase connection..."
 python3 -c "
