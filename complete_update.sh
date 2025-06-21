@@ -173,8 +173,8 @@ case "$1" in
         systemctl status ezrec.service --no-pager
         ;;
     logs)
-        echo "Showing recent logs (-f for follow)..."
-        journalctl -u ezrec.service -n 50 --no-pager
+        echo "Showing live logs (Ctrl+C to exit)..."
+        journalctl -u ezrec.service -f -n 50 --no-pager
         ;;
     health)
         echo "EZREC Backend Health Check"
