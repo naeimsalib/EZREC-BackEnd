@@ -4,7 +4,7 @@
 set -ex # Exit on error and print commands
 
 # --- Configuration ---
-TARGET_USER="michomanoly14892"
+TARGET_USER="${SUDO_USER:-$USER}"
 
 # --- Colors for Output ---
 GREEN='\033[0;32m'
