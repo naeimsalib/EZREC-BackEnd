@@ -66,7 +66,7 @@ cat > "$EXISTING_DIR/.env" << EOL
 # Supabase Configuration
 SUPABASE_URL=https://iszmsaayxpdrovealrrp.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlzem1zYWF5eHBkcm92ZWFscnJwIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0ODM2NjAxMywiZXhwIjoyMDYzOTQyMDEzfQ.tzm80_eIy2xho652OxV37ErGnxwOuUvE4-MIPWrdS0c
-SUPABASE_ANON_KEY=your_supabase_anon_key_here
+SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlzem1zYWF5eHBkcm92ZWFscnJwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgzNjYwMTMsImV4cCI6MjA2Mzk0MjAxM30.5bE_fPBOgkNtEyjCieW328oxyDHWGpf2OTDWssJ_Npk
 
 # User Configuration
 USER_ID=65aa2e2a-e463-424d-b88f-0724bb0bea3a
@@ -94,7 +94,7 @@ DEBUG=true
 LOG_LEVEL=INFO
 EOL
 
-print_info "Updated .env file with missing variables"
+print_info "Updated .env file with all correct keys."
 
 echo ""
 
@@ -390,6 +390,5 @@ echo "  sudo $EXISTING_DIR/manage.sh logs"
 echo "  sudo $EXISTING_DIR/manage.sh health"
 echo "  sudo $EXISTING_DIR/manage.sh update"
 echo ""
-print_warning "IMPORTANT: You need to add your Supabase ANON_KEY to the .env file:"
-echo "  sudo nano $EXISTING_DIR/.env"
-echo "  Add: SUPABASE_ANON_KEY=your_actual_anon_key_here" 
+print_warning "IMPORTANT: All keys have been updated. No manual .env edit is needed."
+echo "You can now manage the service with ./manage.sh" 
