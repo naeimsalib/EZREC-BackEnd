@@ -42,6 +42,7 @@ class EZRECOrchestrator:
         self.scheduler_thread = None
         self.current_booking_id = None
         self.is_running = False
+        self.recording_errors = 0
         
         # Setup signal handlers for graceful shutdown
         signal.signal(signal.SIGINT, self._signal_handler)
@@ -62,6 +63,7 @@ class EZRECOrchestrator:
             
             if not self.camera_service.start_recording(booking_id=booking_id):
                 logger.error("Failed to start recording")
+                self.recording_errors += 1
                 return False
 
             self.current_booking_id = booking_id
@@ -82,6 +84,7 @@ class EZRECOrchestrator:
                 return True
             else:
                 logger.error("Failed to stop recording")
+                self.recording_errors += 1
                 return False
         except Exception as e:
             logger.error(f"Exception in stop_recording: {e}", exc_info=True)
@@ -133,6 +136,7 @@ class EZRECOrchestrator:
                 
             except Exception as e:
                 logger.error(f"Error in recording worker: {e}", exc_info=True)
+                self.recording_errors += 1
                 time.sleep(5)
 
     def status_worker(self):
@@ -142,7 +146,8 @@ class EZRECOrchestrator:
                 update_system_status(
                     is_recording=self.camera_service.is_recording,
                     is_streaming=True,
-                    storage_used=get_storage_used()
+                    storage_used=get_storage_used(),
+                    recording_errors=self.recording_errors
                 )
                 time.sleep(STATUS_UPDATE_INTERVAL)
             except Exception as e:

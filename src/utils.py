@@ -73,6 +73,39 @@ def setup_logging():
 
 logger = setup_logging()
 
+def get_cpu_temperature() -> Optional[float]:
+    """Get CPU temperature from Raspberry Pi sensor."""
+    try:
+        # For Raspberry Pi, the temperature is in /sys/class/thermal/thermal_zone0/temp
+        # The value is in millidegrees Celsius, so we divide by 1000.
+        with open("/sys/class/thermal/thermal_zone0/temp", "r") as f:
+            temp = int(f.read().strip()) / 1000.0
+        return temp
+    except FileNotFoundError:
+        # This will happen on non-Raspberry Pi systems.
+        logger.info("Temperature sensor not found. Skipping temperature reading.")
+        return None
+    except Exception as e:
+        logger.error(f"Could not read temperature: {e}")
+        return None
+
+def get_disk_usage(path: str = "/") -> float:
+    """Get disk usage percentage for the given path."""
+    return psutil.disk_usage(path).percent
+
+def get_uptime() -> int:
+    """Get system uptime in seconds."""
+    return int(time.time() - psutil.boot_time())
+
+def get_active_processes() -> int:
+    """Get the number of active processes."""
+    return len(psutil.pids())
+
+def get_network_errors() -> int:
+    """Get total network errors (inbound and outbound)."""
+    net_io = psutil.net_io_counters()
+    return net_io.errin + net_io.errout
+
 def get_ip() -> str:
     """Get the local IP address."""
     try:
@@ -93,55 +126,53 @@ def update_system_status(
     is_recording: bool = False,
     is_streaming: bool = False,
     storage_used: int = 0,
-    last_backup: Optional[str] = None
+    last_backup: Optional[str] = None,
+    recording_errors: int = 0
 ) -> bool:
-    """Update system status in the database."""
+    """
+    Collects a comprehensive set of system metrics and upserts them to the
+    system_status table in Supabase.
+    """
     try:
-        # Collect memory and CPU usage
-        mem = psutil.virtual_memory()
-        cpu = psutil.cpu_percent(interval=0.5)
-        
+        # 1. Collect all system metrics
         now = local_now()
         
-        # Update system status - try update first, then insert if not found
         system_data = {
             "user_id": USER_ID,
+            "last_seen": now.isoformat(),
+            
+            # Core metrics for system health
+            "cpu_usage_percent": psutil.cpu_percent(interval=0.5),
+            "memory_usage_percent": psutil.virtual_memory().percent,
+            "disk_usage_percent": get_disk_usage(),
+            "temperature_celsius": get_cpu_temperature(),
+            "uptime_seconds": get_uptime(),
+            "active_processes": get_active_processes(),
+            "network_errors": get_network_errors(),
+            "recording_errors": recording_errors,
+            
+            # Legacy fields (can be deprecated later)
             "is_recording": is_recording,
             "is_streaming": is_streaming,
             "storage_used": storage_used or get_storage_used(),
-            "last_backup": last_backup,
-            "last_seen": now.isoformat(),
-            "last_heartbeat": now.isoformat(),
             "ip_address": get_ip(),
-            "memory_usage": mem.percent,
-            "cpu_usage": cpu,
             "pi_active": True
         }
+
+        # 2. Filter out None values (e.g., temperature on non-Pi systems)
+        system_data = {k: v for k, v in system_data.items() if v is not None}
         
-        # Try to update existing record first
-        try:
-            result = supabase.table("system_status").update(system_data).eq("user_id", USER_ID).execute()
-            if not result.data:
-                # No existing record found, insert new one
-                supabase.table("system_status").insert(system_data).execute()
-                logger.info("Created new system_status record")
-            else:
-                logger.info("Updated existing system_status record")
-        except Exception as e:
-            # If update fails, try insert
-            logger.warning(f"Update failed, trying insert: {e}")
-            try:
-                supabase.table("system_status").insert(system_data).execute()
-                logger.info("Inserted new system_status record")
-            except Exception as insert_error:
-                logger.error(f"Both update and insert failed: {insert_error}")
-                return False
+        # 3. Upsert data to Supabase
+        # The 'upsert' operation will create a new record if one with the
+        # specified user_id doesn't exist, or update it if it does.
+        # This is more efficient than separate update/insert calls.
+        supabase.table("system_status").upsert(system_data, on_conflict="user_id").execute()
         
-        logger.info(f"System status updated: memory={mem.percent}%, cpu={cpu}%, storage={storage_used}")
+        logger.info("System status metrics successfully sent to Supabase.")
         return True
         
     except Exception as e:
-        logger.error(f"Error updating system status: {e}", exc_info=True)
+        logger.error(f"Error collecting and sending system status: {e}", exc_info=True)
         return False
 
 def save_booking(booking: Dict[str, Any]) -> bool:
