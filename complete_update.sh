@@ -117,6 +117,7 @@ echo ""
 
 # Create or recreate Python virtual environment to ensure it's clean
 print_status "Creating Python virtual environment..."
+rm -rf "$EXISTING_DIR/venv"
 sudo -u "$SERVICE_USER" python3 -m venv "$EXISTING_DIR/venv"
 print_info "✓ Virtual environment created."
 echo ""
@@ -124,7 +125,7 @@ echo ""
 # Install/update Python dependencies into the virtual environment
 print_status "Installing Python dependencies..."
 sudo -u "$SERVICE_USER" "$EXISTING_DIR/venv/bin/pip" install --upgrade pip
-sudo -u "$SERVICE_USER" "$EXISTING_DIR/venv/bin/pip" install -r "$EXISTING_DIR/requirements.txt"
+sudo -u "$SERVICE_USER" "$EXISTING_DIR/venv/bin/pip" install --no-cache-dir --force-reinstall -r "$EXISTING_DIR/requirements.txt"
 print_info "✓ Python dependencies installed."
 echo ""
 
