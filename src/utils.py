@@ -11,6 +11,7 @@ from supabase import create_client, Client
 import time
 import threading
 import psutil
+import cv2
 
 from .config import (
     SUPABASE_URL,
@@ -275,17 +276,107 @@ def cleanup_temp_files(directory: str) -> None:
         logger.error(f"Error cleaning up temporary files: {e}")
 
 def get_storage_used() -> int:
-    """Calculate total storage used by recordings."""
+    """Get total storage used in the recordings directory."""
     try:
-        total_size = 0
-        for dirpath, _, filenames in os.walk(RECORDING_DIR):
-            for filename in filenames:
-                filepath = os.path.join(dirpath, filename)
-                total_size += os.path.getsize(filepath)
+        total_size = sum(
+            os.path.getsize(os.path.join(dirpath, filename))
+            for dirpath, _, filenames in os.walk(RECORDING_DIR)
+            for filename in filenames
+        )
         return total_size
     except Exception as e:
-        logger.error(f"Error calculating storage used: {e}")
+        logger.error(f"Failed to calculate storage used: {e}")
         return 0
+
+# --- Video Processing Functions ---
+
+def overlay_logo(frame, logo_path: str, position: str, cache: Dict) -> any:
+    """
+    Overlays a logo on a video frame.
+    Caches the resized logo to avoid reprocessing.
+    """
+    if not os.path.exists(logo_path):
+        logger.warning(f"Logo file not found at {logo_path}")
+        return frame
+
+    if position not in cache:
+        logo = cv2.imread(logo_path, cv2.IMREAD_UNCHANGED)
+        if logo is None:
+            logger.error(f"Failed to read logo file: {logo_path}")
+            return frame
+
+        h_frame, w_frame = frame.shape[:2]
+        # Resize logo to be 15% of frame width, with a max of 180px
+        fixed_logo_width = min(int(w_frame * 0.15), 180)
+        scale_factor = fixed_logo_width / logo.shape[1]
+        
+        # Check if logo needs resizing
+        if abs(scale_factor - 1.0) > 0.01:
+            logo = cv2.resize(logo, (0, 0), fx=scale_factor, fy=scale_factor, interpolation=cv2.INTER_AREA)
+        
+        cache[position] = logo
+    else:
+        logo = cache[position]
+
+    h_logo, w_logo = logo.shape[:2]
+    h_frame, w_frame = frame.shape[:2]
+    
+    # Position mapping
+    x_margin, y_margin = 20, 20
+    positions = {
+        "top-left": (x_margin, y_margin),
+        "top-right": (w_frame - w_logo - x_margin, y_margin),
+        "bottom-left": (x_margin, h_frame - h_logo - y_margin),
+        "bottom-right": (w_frame - w_logo - x_margin, h_frame - h_logo - y_margin),
+    }
+    x, y = positions.get(position, positions["top-right"])
+
+    # Ensure the logo fits within the frame
+    if x < 0 or y < 0 or x + w_logo > w_frame or y + h_logo > h_frame:
+        logger.warning("Logo position is out of frame boundaries.")
+        return frame
+
+    # Overlay with alpha blending
+    if logo.shape[2] == 4:  # Check for alpha channel
+        alpha = logo[:, :, 3] / 255.0
+        for c in range(3):
+            frame[y:y+h_logo, x:x+w_logo, c] = (
+                alpha * logo[:, :, c] + (1 - alpha) * frame[y:y+h_logo, x:x+w_logo, c]
+            )
+    else:  # No alpha channel
+        frame[y:y+h_logo, x:x+w_logo] = logo
+
+    return frame
+
+def add_timestamp(frame, timestamp_str: str) -> any:
+    """Adds a timestamp overlay to a video frame with a background."""
+    h_frame, w_frame = frame.shape[:2]
+    
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale = max(0.6, min(1.5, w_frame / 1200)) # Scale font with width
+    thickness = max(1, int(font_scale * 1.5))
+    
+    (text_width, text_height), baseline = cv2.getTextSize(timestamp_str, font, font_scale, thickness)
+    
+    padding = 10
+    x = padding
+    y = text_height + padding
+    
+    # Add semi-transparent background
+    overlay = frame.copy()
+    cv2.rectangle(overlay, 
+                  (x, y - text_height - baseline), 
+                  (x + text_width + (padding * 2), y + baseline), 
+                  (0, 0, 0), -1)
+    
+    # Blend the background
+    alpha = 0.6
+    cv2.addWeighted(overlay, alpha, frame, 1 - alpha, 0, frame)
+    
+    # Add timestamp text
+    cv2.putText(frame, timestamp_str, (x + padding, y), font, font_scale, (255, 255, 255), thickness, cv2.LINE_AA)
+    
+    return frame
 
 HEARTBEAT_INTERVAL = 5  # seconds - reduced from 20 to 5 for faster frontend updates
 
@@ -346,6 +437,8 @@ def start_heartbeat_thread():
         _heartbeat_thread.start()
 
 def stop_heartbeat_thread():
-    _heartbeat_stop_event.set()
-    if _heartbeat_thread:
-        _heartbeat_thread.join() 
+    """Stop the heartbeat background thread."""
+    if _heartbeat_thread and _heartbeat_thread.is_alive():
+        _heartbeat_stop_event.set()
+        _heartbeat_thread.join()
+        logger.info("Heartbeat thread stopped") 
