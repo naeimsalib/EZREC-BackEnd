@@ -9,7 +9,7 @@ realtime==1.0.6
 supafunc==0.3.3
 
 # Compatible HTTPX and dependencies for Pi
-httpx==0.23.3
+httpx==0.24.1
 httpcore==0.16.3
 h11==0.14.0
 

@@ -4,6 +4,7 @@ import logging.handlers
 import socket
 import json
 import os
+import sys
 from datetime import datetime
 import pytz
 from typing import Optional, Dict, Any, List
@@ -13,7 +14,10 @@ import threading
 import psutil
 import cv2
 
-from .config import (
+# Add the src directory to the Python path so we can import our modules
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from config import (
     SUPABASE_URL,
     SUPABASE_KEY,
     USER_ID,
@@ -191,6 +195,28 @@ def save_booking(booking: Dict[str, Any]) -> bool:
     except Exception as e:
         logger.error(f"Error saving booking: {e}", exc_info=True)
         return False
+
+def get_next_booking() -> Optional[Dict[str, Any]]:
+    """Get the next upcoming booking from Supabase."""
+    try:
+        now = local_now()
+        
+        # Query for upcoming bookings
+        response = supabase.table("bookings").select("*").gte(
+            "start_time", now.isoformat()
+        ).order("start_time").limit(1).execute()
+        
+        if response.data and len(response.data) > 0:
+            booking = response.data[0]
+            logger.info(f"Found next booking: {booking['id']} at {booking['start_time']}")
+            return booking
+        else:
+            logger.info("No upcoming bookings found")
+            return None
+            
+    except Exception as e:
+        logger.error(f"Error getting next booking: {e}", exc_info=True)
+        return None
 
 def load_booking() -> Optional[Dict[str, Any]]:
     """Load booking information from JSON file."""

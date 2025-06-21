@@ -194,7 +194,6 @@ cat > /etc/systemd/system/ezrec-backend.service << EOL
 [Unit]
 Description=EZREC Backend Service
 After=network.target
-Wants=ezrec-orchestrator.service
 
 [Service]
 Type=simple
@@ -214,90 +213,12 @@ SyslogIdentifier=ezrec-backend
 WantedBy=multi-user.target
 EOL
 
-# Orchestrator service
-cat > /etc/systemd/system/ezrec-orchestrator.service << EOL
-[Unit]
-Description=EZREC Orchestrator Service
-After=network.target
-PartOf=ezrec-backend.service
-
-[Service]
-Type=simple
-User=$SERVICE_USER
-Group=$SERVICE_GROUP
-WorkingDirectory=$APP_DIR
-Environment=PYTHONUNBUFFERED=1
-EnvironmentFile=$APP_DIR/.env
-ExecStart=$APP_DIR/venv/bin/python src/orchestrator.py
-Restart=always
-RestartSec=10
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=ezrec-orchestrator
-
-[Install]
-WantedBy=multi-user.target
-EOL
-
-# Scheduler service
-cat > /etc/systemd/system/ezrec-scheduler.service << EOL
-[Unit]
-Description=EZREC Scheduler Service
-After=network.target
-PartOf=ezrec-backend.service
-
-[Service]
-Type=simple
-User=$SERVICE_USER
-Group=$SERVICE_GROUP
-WorkingDirectory=$APP_DIR
-Environment=PYTHONUNBUFFERED=1
-EnvironmentFile=$APP_DIR/.env
-ExecStart=$APP_DIR/venv/bin/python src/scheduler.py
-Restart=always
-RestartSec=10
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=ezrec-scheduler
-
-[Install]
-WantedBy=multi-user.target
-EOL
-
-# Status service
-cat > /etc/systemd/system/ezrec-status.service << EOL
-[Unit]
-Description=EZREC Status Service
-After=network.target
-PartOf=ezrec-backend.service
-
-[Service]
-Type=simple
-User=$SERVICE_USER
-Group=$SERVICE_GROUP
-WorkingDirectory=$APP_DIR
-Environment=PYTHONUNBUFFERED=1
-EnvironmentFile=$APP_DIR/.env
-ExecStart=$APP_DIR/venv/bin/python src/utils.py --status-service
-Restart=always
-RestartSec=10
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=ezrec-status
-
-[Install]
-WantedBy=multi-user.target
-EOL
-
 # Reload systemd
 systemctl daemon-reload
 
 # Enable services
 print_status "Enabling services..."
 systemctl enable ezrec-backend.service
-systemctl enable ezrec-orchestrator.service
-systemctl enable ezrec-scheduler.service
-systemctl enable ezrec-status.service
 
 # Set permissions
 print_status "Setting final permissions..."
@@ -371,9 +292,6 @@ echo "EZREC Backend Health Check"
 echo "========================="
 
 check_service "ezrec-backend.service"
-check_service "ezrec-orchestrator.service"
-check_service "ezrec-scheduler.service"
-check_service "ezrec-status.service"
 check_disk_space
 check_camera
 
@@ -400,30 +318,30 @@ fi
 case "$1" in
     start)
         echo "Starting EZREC Backend service..."
-        systemctl start ezrec.service
+        systemctl start ezrec-backend.service
         ;;
     stop)
         echo "Stopping EZREC Backend service..."
-        systemctl stop ezrec.service
+        systemctl stop ezrec-backend.service
         ;;
     restart)
         echo "Restarting EZREC Backend service..."
-        systemctl restart ezrec.service
+        systemctl restart ezrec-backend.service
         ;;
     status)
         echo "EZREC Backend Service Status:"
-        systemctl status ezrec.service --no-pager
+        systemctl status ezrec-backend.service --no-pager
         ;;
     logs)
         echo "Showing live logs (Ctrl+C to exit)..."
-        journalctl -u ezrec.service -f -n 50 --no-pager
+        journalctl -u ezrec-backend.service -f -n 50 --no-pager
         ;;
     health)
         echo "EZREC Backend Health Check"
         echo "========================="
         
         # Check service
-        if systemctl is-active --quiet "ezrec.service"; then
+        if systemctl is-active --quiet "ezrec-backend.service"; then
             echo "✓ EZREC Service is running"
         else
             echo "✗ EZREC Service is NOT running"
@@ -441,7 +359,7 @@ case "$1" in
         fi
         
         echo ""
-        echo "For detailed logs: journalctl -u ezrec.service -f"
+        echo "For detailed logs: journalctl -u ezrec-backend.service -f"
         ;;
     update)
         echo "Updating EZREC Backend..."
@@ -450,7 +368,7 @@ case "$1" in
         echo "Updating Python dependencies..."
         "$APP_DIR/venv/bin/pip" install -r "$APP_DIR/requirements.txt"
         echo "Restarting service..."
-        sudo systemctl restart ezrec.service
+        sudo systemctl restart ezrec-backend.service
         echo "Update complete!"
         ;;
     *)

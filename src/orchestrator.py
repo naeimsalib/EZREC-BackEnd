@@ -6,21 +6,24 @@ All paths and logging are set via config.py and default to /opt/ezrec-backend.
 """
 
 import os
+import sys
 import time
 import threading
 import signal
-import sys
 from datetime import datetime
 import logging
 from logging.handlers import RotatingFileHandler
 
-from .config import (
+# Add the src directory to the Python path so we can import our modules
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from config import (
     BOOKING_CHECK_INTERVAL, STATUS_UPDATE_INTERVAL, LOG_DIR
 )
-from .utils import (
+from utils import (
     logger, load_booking, update_system_status, get_next_booking, save_booking
 )
-from .camera import CameraService
+from camera import CameraService
 
 class EZRECOrchestrator:
     """

@@ -1,16 +1,21 @@
 #!/usr/bin/env python3
 import os
+import sys
 import time
 import threading
 from datetime import datetime
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict, Any
 import subprocess
 import json
 import queue
 import shutil
 
 import cv2
-from .utils import (
+
+# Add the src directory to the Python path so we can import our modules
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from utils import (
     logger,
     supabase,
     queue_upload,
@@ -20,10 +25,9 @@ from .utils import (
     update_system_status,
     get_storage_used,
     remove_booking,
-    save_booking,
-    update_system_status_with_booking
+    save_booking
 )
-from .config import (
+from config import (
     CAMERA_ID,
     RECORD_WIDTH,
     RECORD_HEIGHT,
@@ -37,7 +41,7 @@ from .config import (
     TRADEMARK_PATH,
     INTRO_VIDEO_PATH
 )
-from .camera_interface import CameraInterface
+from camera_interface import CameraInterface
 
 class CameraService:
     def __init__(self):
