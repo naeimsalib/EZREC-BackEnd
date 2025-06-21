@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-EZREC Backend - Clean Orchestrator Service
-Consolidated version that removes redundant code and provides a single entry point
-for the camera recording system.
+EZREC Backend - Clean Orchestrator Service (Pi-optimized)
+This script is intended to be run via systemd on Raspberry Pi OS (Debian).
+All paths and logging are set via config.py and default to /opt/ezrec-backend.
 """
 
 import os

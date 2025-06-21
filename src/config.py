@@ -5,8 +5,8 @@ from pathlib import Path
 # Load environment variables
 load_dotenv()
 
-# Base paths
-BASE_DIR = Path(__file__).parent.parent
+# Pi-optimized: Default to /opt/ezrec-backend if not overridden
+BASE_DIR = Path(os.getenv("EZREC_BASE_DIR", "/opt/ezrec-backend"))
 TEMP_DIR = BASE_DIR / "temp"
 UPLOAD_DIR = BASE_DIR / "uploads"
 LOG_DIR = BASE_DIR / "logs"

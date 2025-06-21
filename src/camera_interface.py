@@ -1,3 +1,4 @@
+# Pi-optimized Camera Interface: auto-detects Pi Camera or USB camera. All paths set via config.py.
 import os
 import time
 import threading

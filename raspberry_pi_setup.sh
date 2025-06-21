@@ -1,9 +1,16 @@
 #!/bin/bash
 
 # EZREC Backend - Raspberry Pi Setup Script
+# THIS IS THE ONLY SUPPORTED INSTALL/UPDATE SCRIPT FOR RASPBERRY PI
 # This script installs and configures the EZREC backend on a Raspberry Pi
 
 set -e
+
+# Remove legacy/unsupported scripts if present
+if [ -f "complete_update.sh" ]; then
+    echo -e "\033[1;33m[!] Removing deprecated complete_update.sh (use only this script for Pi)\033[0m"
+    rm -f complete_update.sh
+fi
 
 # Colors for output
 RED='\033[0;31m'

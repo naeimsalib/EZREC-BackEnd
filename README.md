@@ -2,6 +2,41 @@
 
 Backend services and system components for the EZREC SmartCam Soccer system.
 
+## 🚨 Raspberry Pi Deployment & Update 🚨
+
+**For all Raspberry Pi deployments and updates, use ONLY the `raspberry_pi_setup.sh` script.**
+
+- This script will install all dependencies, set up the correct user, configure systemd services, and ensure all permissions are correct for the Pi.
+- The legacy `complete_update.sh` script is now removed and should NOT be used.
+- All updates and management should be done via the `manage.sh` script in `/opt/ezrec-backend`.
+
+### To deploy or update on your Raspberry Pi:
+
+```bash
+# 1. Clone or pull the latest code
+cd /opt/ezrec-backend || git clone https://github.com/naeimsalib/EZREC-BackEnd.git /opt/ezrec-backend
+cd /opt/ezrec-backend
+
+# 2. Run the setup script (for fresh install or update)
+sudo ./raspberry_pi_setup.sh
+
+# 3. Edit your .env file if needed
+sudo nano /opt/ezrec-backend/.env
+
+# 4. Start the system
+sudo /opt/ezrec-backend/manage.sh start
+
+# 5. Check status/logs
+sudo /opt/ezrec-backend/manage.sh status
+sudo /opt/ezrec-backend/manage.sh logs
+
+# 6. To update in the future
+cd /opt/ezrec-backend
+sudo /opt/ezrec-backend/manage.sh update
+```
+
+---
+
 ## Overview
 
 This repository contains all the backend services, systemd configurations, and server-side code for the EZREC SmartCam Soccer system. The frontend application is maintained in a separate repository: [EZREC-FrontEnd](https://github.com/naeimsalib/EZREC-FrontEnd.git).
@@ -35,12 +70,12 @@ This repository contains all the backend services, systemd configurations, and s
 
 ### Prerequisites
 
-- Python 3.8+
-- Raspberry Pi (for camera services)
-- Supabase account and project
+- Raspberry Pi OS (Bullseye or newer)
+- Raspberry Pi 4 (recommended) or 3B+
 - Camera hardware (USB or Pi Camera)
+- Supabase account and project
 
-### Quick Setup
+### Quick Setup (Raspberry Pi)
 
 1. Clone the repository:
 ```bash
@@ -48,49 +83,63 @@ git clone https://github.com/naeimsalib/EZREC-BackEnd.git
 cd EZREC-BackEnd
 ```
 
-2. Run the automated setup:
+2. Run the Pi setup script:
 ```bash
-chmod +x setup.sh
-./setup.sh
+chmod +x raspberry_pi_setup.sh
+sudo ./raspberry_pi_setup.sh
 ```
 
 3. Configure environment variables:
-Create a `.env` file with your Supabase credentials:
-```env
-SUPABASE_URL=your_supabase_url
-SUPABASE_KEY=your_supabase_service_key
-CAMERA_DEVICE=/dev/video0
-RECORDING_PATH=/path/to/recordings
-```
-
-4. Set up systemd services:
 ```bash
-sudo cp systemd/*.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable smartcam-camera smartcam-scheduler smartcam-orchestrator
-sudo systemctl start smartcam-camera smartcam-scheduler smartcam-orchestrator
+sudo nano /opt/ezrec-backend/.env
 ```
 
-### Manual Installation
-
-If you prefer manual installation:
-
-1. Install Python dependencies:
+4. Start the system:
 ```bash
-pip install -r requirements.txt
+sudo /opt/ezrec-backend/manage.sh start
 ```
 
-2. Set up virtual environment:
+5. Check status/logs:
 ```bash
-python -m venv venv
-source venv/bin/activate
+sudo /opt/ezrec-backend/manage.sh status
+sudo /opt/ezrec-backend/manage.sh logs
 ```
 
-3. Install system dependencies:
+6. Update in the future:
 ```bash
-chmod +x install_dependencies.sh
-./install_dependencies.sh
+cd /opt/ezrec-backend
+sudo /opt/ezrec-backend/manage.sh update
 ```
+
+---
+
+## For Developers (Non-Pi)
+
+- You may use a virtual environment and run the code for development, but all deployment and service management must be done via the Pi scripts above.
+- The codebase is fully compatible with Raspberry Pi OS and will auto-detect camera hardware.
+
+---
+
+## Troubleshooting
+
+- If you encounter issues, use the health check:
+```bash
+sudo /opt/ezrec-backend/manage.sh health
+```
+- Check logs for errors:
+```bash
+sudo /opt/ezrec-backend/manage.sh logs
+```
+- Ensure your `.env` file is correct and all permissions are set as per the setup script.
+
+---
+
+## Support
+
+For issues and questions:
+- Check the troubleshooting section
+- Review logs for error messages
+- Create an issue on GitHub
 
 ## Usage
 
@@ -169,33 +218,6 @@ Logs are stored in:
 - `logs.txt`: General application logs
 - `logs_last_10min.txt`: Recent activity
 - System logs via journalctl
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Camera not detected**
-   - Check camera permissions
-   - Verify device path in environment variables
-   - Ensure camera is properly connected
-
-2. **Services not starting**
-   - Check systemd service status
-   - Verify environment variables
-   - Check log files for errors
-
-3. **Database connection issues**
-   - Verify Supabase credentials
-   - Check network connectivity
-   - Ensure database tables exist
-
-### Debug Mode
-
-Enable debug logging by setting:
-```env
-DEBUG=true
-LOG_LEVEL=DEBUG
-```
 
 ## API Endpoints
 

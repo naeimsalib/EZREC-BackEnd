@@ -1,3 +1,5 @@
+# Pi-optimized .gitignore for EZREC Backend
+
 # Python
 __pycache__/
 *.py[cod]
@@ -125,4 +127,7 @@ test_*.py
 
 # Backup files
 *.bak
-*.backup 
+*.backup
+
+# Pi runtime folders
+/opt/ezrec-backend/ 
