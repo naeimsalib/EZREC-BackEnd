@@ -7,6 +7,7 @@ from typing import Optional, Tuple
 import subprocess
 import json
 import queue
+import shutil
 
 import cv2
 from .utils import (
@@ -19,6 +20,8 @@ from .utils import (
     update_system_status,
     get_storage_used,
     remove_booking,
+    save_booking,
+    update_system_status_with_booking
 )
 from .config import (
     CAMERA_ID,
@@ -27,7 +30,12 @@ from .config import (
     RECORD_FPS,
     RECORDING_DIR,
     TEMP_DIR,
-    MAX_RECORDING_DURATION
+    MAX_RECORDING_DURATION,
+    UPLOAD_DIR,
+    USER_ID,
+    LOGO_PATH,
+    TRADEMARK_PATH,
+    INTRO_VIDEO_PATH
 )
 from .camera_interface import CameraInterface
 
@@ -48,6 +56,8 @@ class CameraService:
         self.upload_queue_file = os.path.join(TEMP_DIR, "upload_queue.json")
         self.upload_queue = self._load_upload_queue()
         self.file_booking_map = self._load_file_booking_map()
+        self.current_booking: Optional[Dict[str, Any]] = None
+        self.logo_cache: Dict[str, Any] = {}
         self._start_upload_worker()
         # The watchdog is problematic for graceful shutdowns, so it's disabled.
         # self._start_upload_worker_watchdog()
@@ -131,44 +141,52 @@ class CameraService:
             logger.error(f"Error attaching intro video: {e}")
             return recording_path
 
-    def start_recording(self, booking_id=None) -> bool:
+    def start_recording(self, booking: Dict[str, Any]) -> bool:
         """Start recording video using CameraInterface."""
         if self.is_recording:
-            logger.warning("Already recording")
+            logger.warning("Already recording.")
             return False
+        if not self.interface:
+            logger.error("Camera interface not initialized.")
+            return False
+            
         try:
-            logger.info("[Recording Sign] Would turn ON recording indicator here.")
-            self.current_file = self.interface.start_recording()
+            self.current_booking = booking
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"rec_{booking['id']}_{timestamp}.mp4"
+            
+            self.interface.start_recording(filename)
             self.is_recording = True
             self.recording_start = time.time()
-            if booking_id:
-                self.file_booking_map[self.current_file] = booking_id
-                logger.info(f"[Booking Map] Associated {self.current_file} with booking {booking_id}")
+            if booking['id']:
+                self.file_booking_map[filename] = booking['id']
+                logger.info(f"[Booking Map] Associated {filename} with booking {booking['id']}")
             try:
                 update_system_status(is_recording=True)
             except Exception as e:
                 logger.error(f"Error updating system status after start_recording: {e}", exc_info=True)
-            logger.info(f"Started recording to {self.current_file}")
+            logger.info(f"Started recording for booking {booking['id']} to file {filename}")
             return True
         except Exception as e:
             logger.error(f"Error starting recording: {e}", exc_info=True)
             return False
 
-    def stop_recording(self):
+    def stop_recording(self) -> bool:
         """Stop recording and queue file for upload."""
-        if not self.is_recording:
-            logger.warning("stop_recording called but not recording")
+        if not self.is_recording or not self.interface:
+            logger.warning("stop_recording called but not recording or camera interface not initialized")
             return False
         try:
             logger.info("[Camera] Beginning recording stop process")
             self.is_recording = False
-            self.interface.stop_recording()
+            raw_video_path = self.interface.stop_recording()
+            self.interface.release()
             logger.info("[Camera] Recording stopped")
             
-            if self.current_file:
-                logger.info(f"[Camera] Processing recording file: {self.current_file}")
-                if os.path.exists(self.current_file):
-                    size = os.path.getsize(self.current_file)
+            if raw_video_path and os.path.exists(raw_video_path):
+                logger.info(f"[Camera] Processing recording file: {raw_video_path}")
+                if os.path.exists(raw_video_path):
+                    size = os.path.getsize(raw_video_path)
                     logger.info(f"[Camera] Recording file exists, size: {size} bytes")
                     
                     # Wait a moment to ensure file is fully written
@@ -176,22 +194,22 @@ class CameraService:
                     
                     try:
                         # Try to attach intro video
-                        final_path = self.attach_intro_video(self.current_file)
+                        final_path = self.attach_intro_video(raw_video_path)
                         if final_path and os.path.exists(final_path):
                             logger.info(f"[Camera] Final video created at: {final_path}")
-                            booking_id = self.file_booking_map.get(self.current_file)
+                            booking_id = self.file_booking_map.get(raw_video_path)
                             if booking_id:
                                 logger.info(f"[Camera] Adding to upload queue with booking ID: {booking_id}")
                                 self.add_to_upload_queue(final_path, booking_id)
                                 logger.info(f"[Camera] Successfully queued for upload: {final_path}")
                             else:
-                                logger.error(f"[Camera] No booking ID found for file: {self.current_file}")
+                                logger.error(f"[Camera] No booking ID found for file: {raw_video_path}")
                         else:
-                            logger.error(f"[Camera] Failed to create final video from: {self.current_file}")
+                            logger.error(f"[Camera] Failed to create final video from: {raw_video_path}")
                     except Exception as e:
                         logger.error(f"[Camera] Error processing recording: {str(e)}", exc_info=True)
                 else:
-                    logger.error(f"[Camera] Recording file does not exist: {self.current_file}")
+                    logger.error(f"[Camera] Recording file does not exist: {raw_video_path}")
             else:
                 logger.warning("[Camera] No current file to process after recording")
             
@@ -205,6 +223,9 @@ class CameraService:
             # Clear recording state
             self.current_file = None
             self.recording_start = None
+            self.current_booking = None
+            
+            remove_booking()
             
             return True
         except Exception as e:
@@ -441,6 +462,171 @@ class CameraService:
         
         self.upload_worker_running = False
         logger.info("Upload worker stopped.")
+
+    def process_and_queue_video(self, raw_path: str, booking: Dict[str, Any]):
+        try:
+            logger.info(f"Starting post-processing for {raw_path}")
+            
+            # 1. Add Overlays (Timestamp, Logo, Trademark)
+            processed_path = os.path.join(str(UPLOAD_DIR), f"processed_{os.path.basename(raw_path)}")
+            if not self._add_overlays(raw_path, processed_path, booking):
+                logger.error("Overlay processing failed. Uploading raw video instead.")
+                shutil.copy(raw_path, processed_path)
+            
+            # 2. Prepend Intro Video
+            final_path = os.path.join(str(UPLOAD_DIR), f"final_{os.path.basename(raw_path)}")
+            if os.path.exists(INTRO_VIDEO_PATH):
+                logger.info("Prepending intro video.")
+                if not self._prepend_intro(INTRO_VIDEO_PATH, processed_path, final_path):
+                    logger.error("Failed to prepend intro video. Using video without intro.")
+                    os.rename(processed_path, final_path)
+            else:
+                logger.warning("No intro video found. Skipping that step.")
+                os.rename(processed_path, final_path)
+
+            # 3. Add to upload queue
+            self._add_to_upload_queue(final_path, booking['id'])
+            
+            # 4. Cleanup intermediate files
+            if os.path.exists(raw_path): os.remove(raw_path)
+            if os.path.exists(processed_path): os.remove(processed_path)
+            logger.info(f"Successfully processed and queued for upload: {final_path}")
+
+        except Exception as e:
+            logger.error(f"Critical error in video processing pipeline: {e}", exc_info=True)
+
+    def _add_overlays(self, in_path: str, out_path: str, booking: Dict[str, Any]) -> bool:
+        cap = cv2.VideoCapture(in_path)
+        if not cap.isOpened():
+            logger.error(f"Failed to open video for overlay: {in_path}")
+            return False
+            
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        fps = cap.get(cv2.CAP_PROP_FPS)
+
+        # Use MP4V codec, which is widely compatible
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        out = cv2.VideoWriter(out_path, fourcc, fps, (width, height))
+        
+        frame_num = 0
+        booking_start_time = datetime.fromisoformat(booking['start_time'])
+
+        while cap.isOpened():
+            ret, frame = cap.read()
+            if not ret:
+                break
+
+            # Add timestamp
+            current_time = booking_start_time + (datetime.now().astimezone().utcoffset() or timedelta(0)) + timedelta(seconds=frame_num / fps)
+            timestamp_str = current_time.strftime("%Y-%m-%d %H:%M:%S")
+            self._overlay_text(frame, timestamp_str, 'top_left')
+
+            # Add main logo
+            if os.path.exists(LOGO_PATH):
+                frame = self._overlay_image(frame, LOGO_PATH, 'top_right')
+            
+            # Add trademark
+            if os.path.exists(TRADEMARK_PATH):
+                frame = self._overlay_image(frame, TRADEMARK_PATH, 'bottom_center')
+            
+            out.write(frame)
+            frame_num += 1
+
+        cap.release()
+        out.release()
+        logger.info("Successfully added overlays.")
+        return True
+
+    def _prepend_intro(self, intro_path: str, main_path: str, out_path: str) -> bool:
+        # Use ffmpeg for reliable video concatenation
+        list_file = os.path.join(str(TEMP_DIR), "concat_list.txt")
+        with open(list_file, "w") as f:
+            f.write(f"file '{os.path.abspath(intro_path)}'\n")
+            f.write(f"file '{os.path.abspath(main_path)}'\n")
+            
+        cmd = [
+            "ffmpeg", "-y", "-f", "concat", "-safe", "0",
+            "-i", list_file, "-c", "copy", out_path
+        ]
+        try:
+            res = subprocess.run(cmd, check=True, capture_output=True, text=True)
+            logger.info("Intro video prepended successfully.")
+            os.remove(list_file)
+            return True
+        except subprocess.CalledProcessError as e:
+            logger.error(f"ffmpeg failed to prepend intro: {e.stderr}")
+            os.remove(list_file)
+            return False
+
+    def _overlay_image(self, frame, image_path, position):
+        # Implementation for overlaying an image (logo/trademark)
+        if image_path not in self.logo_cache:
+            logo = cv2.imread(image_path, cv2.IMREAD_UNCHANGED)
+            if logo is None: 
+                self.logo_cache[image_path] = None
+                return frame
+            self.logo_cache[image_path] = logo
+        
+        logo = self.logo_cache[image_path]
+        if logo is None: return frame
+
+        fh, fw, _ = frame.shape
+        lh, lw, _ = logo.shape
+        
+        # Scale logo to be 15% of frame width
+        scale = (fw * 0.15) / lw
+        logo = cv2.resize(logo, (0,0), fx=scale, fy=scale)
+        lh, lw, _ = logo.shape
+
+        if position == 'top_right':
+            x, y = fw - lw - 20, 20
+        elif position == 'bottom_center':
+            x, y = (fw - lw) // 2, fh - lh - 20
+        else: # Default top-left
+            x, y = 20, 20
+
+        # Simple alpha blending
+        if logo.shape[2] == 4:
+            alpha = logo[:,:,3] / 255.0
+            for c in range(3):
+                frame[y:y+lh, x:x+lw, c] = alpha * logo[:,:,c] + (1-alpha) * frame[y:y+lh, x:x+lw, c]
+        else:
+            frame[y:y+lh, x:x+lw] = logo
+            
+        return frame
+
+    def _overlay_text(self, frame, text, position):
+        # Implementation for overlaying text (timestamp)
+        (w, h), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.8, 2)
+        fh, fw, _ = frame.shape
+        
+        if position == 'top_left':
+            x, y = 20, 20 + h
+        
+        cv2.rectangle(frame, (x-5, y-h-5), (x+w+5, y+5), (0,0,0), -1)
+        cv2.putText(frame, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+        return frame
+
+    def _add_to_upload_queue(self, file_path: str, booking_id: str):
+        queue = self._get_upload_queue()
+        queue.append({"file_path": file_path, "booking_id": booking_id})
+        self._save_upload_queue(queue)
+        logger.info(f"Added {file_path} to upload queue.")
+
+    def _get_upload_queue(self) -> list:
+        queue_file = os.path.join(str(TEMP_DIR), "upload_queue.json")
+        if not os.path.exists(queue_file): return []
+        try:
+            with open(queue_file, 'r') as f:
+                return json.load(f)
+        except (json.JSONDecodeError, FileNotFoundError):
+            return []
+
+    def _save_upload_queue(self, queue: list):
+        queue_file = os.path.join(str(TEMP_DIR), "upload_queue.json")
+        with open(queue_file, 'w') as f:
+            json.dump(queue, f)
 
 def main():
     """Test function for CameraService."""

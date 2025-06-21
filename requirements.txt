@@ -1,19 +1,19 @@
 python-dotenv==1.0.0
 
-# Supabase Stack
+# Supabase Stack - Pinned to versions known to be compatible
 supabase==2.2.1
-gotrue==2.9.1
+gotrue==2.7.2
 postgrest==0.15.1
 storage3==0.7.7
 realtime==1.0.6
 supafunc==0.3.3
 
-# Compatible HTTPX
+# Compatible HTTPX and dependencies
 httpx==0.23.3
 httpcore==0.16.3
 h11==0.14.0
 
-# System Dependencies
+# System & Camera Dependencies
 opencv-python==4.8.1.78
 numpy==1.26.4
 psutil==5.9.4

@@ -107,6 +107,12 @@ RECORDING_DIR=$EXISTING_DIR/recordings
 LOG_DIR=$EXISTING_DIR/logs
 TEMP_DIR=$EXISTING_DIR/temp
 UPLOAD_DIR=$EXISTING_DIR/uploads
+ASSETS_DIR=$EXISTING_DIR/user_assets
+
+# Asset Paths
+LOGO_PATH=$ASSETS_DIR/logo.png
+TRADEMARK_PATH=$ASSETS_DIR/trademark.png
+INTRO_VIDEO_PATH=$ASSETS_DIR/intro.mp4
 
 # System Configuration
 DEBUG=true
@@ -144,7 +150,7 @@ WorkingDirectory=$EXISTING_DIR
 Environment=PYTHONUNBUFFERED=1
 EnvironmentFile=$EXISTING_DIR/.env
 # Run the orchestrator as a module to fix import errors
-ExecStart=$EXISTING_DIR/venv/bin/python -m src.orchestrator_clean
+ExecStart=$EXISTING_DIR/venv/bin/python -m src.orchestrator
 Restart=always
 RestartSec=10
 StandardOutput=journal
@@ -248,6 +254,25 @@ chown "$SERVICE_USER:$SERVICE_USER" "$EXISTING_DIR/manage.sh"
 print_info "✓ Created manage.sh"
 echo ""
 
+# Create placeholder assets if they don't exist
+print_status "Checking for user assets..."
+if [ ! -f "$ASSETS_DIR/logo.png" ]; then
+    print_warning "logo.png not found. Creating a placeholder."
+    touch "$ASSETS_DIR/logo.png"
+    chown "$SERVICE_USER:$SERVICE_USER" "$ASSETS_DIR/logo.png"
+fi
+if [ ! -f "$ASSETS_DIR/trademark.png" ]; then
+    print_warning "trademark.png not found. Creating a placeholder."
+    touch "$ASSETS_DIR/trademark.png"
+    chown "$SERVICE_USER:$SERVICE_USER" "$ASSETS_DIR/trademark.png"
+fi
+if [ ! -f "$ASSETS_DIR/intro.mp4" ]; then
+    print_warning "intro.mp4 not found. Creating a placeholder."
+    touch "$ASSETS_DIR/intro.mp4"
+    chown "$SERVICE_USER:$SERVICE_USER" "$ASSETS_DIR/intro.mp4"
+fi
+print_info "✓ Asset check complete."
+echo ""
 
 # Final status check
 print_status "Final status check..."

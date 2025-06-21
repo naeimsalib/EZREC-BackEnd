@@ -1,161 +1,196 @@
 #!/usr/bin/env python3
+"""
+EZREC Backend - Clean Orchestrator Service
+Consolidated version that removes redundant code and provides a single entry point
+for the camera recording system.
+"""
+
+import os
 import time
 import threading
+import signal
+import sys
 from datetime import datetime
-from typing import Optional
+import logging
+from logging.handlers import RotatingFileHandler
 
-from .utils import (
-    logger,
-    load_booking,
-    remove_booking,
-    update_system_status,
-    remove_booking_from_supabase,
-    get_upload_queue
+from .config import (
+    BOOKING_CHECK_INTERVAL, STATUS_UPDATE_INTERVAL, LOG_DIR
 )
-from .config import BOOKING_CHECK_INTERVAL
+from .utils import (
+    logger, load_booking, update_system_status, get_next_booking, save_booking
+)
 from .camera import CameraService
 
-class Orchestrator:
+class EZRECOrchestrator:
+    """
+    Main orchestrator class that coordinates all EZREC backend services.
+    """
+    
     def __init__(self):
         self.camera_service = CameraService()
         self.stop_event = threading.Event()
         self.recording_thread = None
+        self.status_thread = None
+        self.scheduler_thread = None
         self.current_booking_id = None
+        self.is_running = False
+        
+        signal.signal(signal.SIGINT, self._signal_handler)
+        signal.signal(signal.SIGTERM, self._signal_handler)
+        
+        logger.info("EZREC Orchestrator initialized")
 
-    def start_recording(self, booking_id: str) -> bool:
-        """Start recording for a specific booking."""
-        try:
-            logger.info(f"Attempting to start recording for booking {booking_id}")
-            booking = load_booking()
-            if not booking or booking["id"] != booking_id:
-                logger.error(f"Invalid booking ID: {booking_id}")
-                return False
-
-            if not self.camera_service.start_recording(booking_id=booking_id):
-                logger.error("Failed to start recording")
-                return False
-
-            self.current_booking_id = booking_id
-            logger.info(f"Started recording for booking {booking_id}")
-            return True
-
-        except Exception as e:
-            logger.error(f"Error starting recording: {e}", exc_info=True)
-            return False
-
-    def stop_recording(self) -> bool:
-        """Stop the current recording."""
-        try:
-            logger.info("Attempting to stop recording")
-            if self.camera_service.stop_recording():
-                logger.info("Recording stopped successfully")
-                logger.info(f"Upload queue after stop_recording: {self.camera_service.upload_queue}")
-                # Do not remove booking here; let upload worker handle it after successful upload
-                return True
-            else:
-                logger.error("Failed to stop recording")
-                return False
-        except Exception as e:
-            logger.error(f"Exception in stop_recording: {e}", exc_info=True)
-            return False
-
-    def manual_trigger_upload_worker(self):
-        logger.info("[Orchestrator] Manual trigger for upload worker.")
-        self.camera_service.manual_trigger_upload_queue()
+    def _signal_handler(self, signum, frame):
+        logger.info(f"Received signal {signum}, shutting down gracefully...")
+        self.stop()
+        sys.exit(0)
 
     def recording_worker(self):
-        """Background thread for managing recordings."""
-        last_booking_id = None
+        """Background thread for managing recordings based on bookings."""
         while not self.stop_event.is_set():
             try:
                 booking = load_booking()
-                # Use local time
+                if not booking:
+                    if self.camera_service.is_recording:
+                        logger.warning("No active booking found, but recording is on. Stopping now.")
+                        self.camera_service.stop_recording()
+                    self.stop_event.wait(5)
+                    continue
+
                 now = datetime.now().astimezone()
-                if booking:
-                    # Parse the time correctly with local timezone
-                    local_tz = now.tzinfo
-                    booking_date = datetime.strptime(booking["date"], "%Y-%m-%d").date()
-                    start_time = datetime.strptime(booking["start_time"], "%H:%M").time()
-                    end_time = datetime.strptime(booking["end_time"], "%H:%M").time()
-                    
-                    # Combine date and time with local timezone
-                    start_datetime = datetime.combine(booking_date, start_time).astimezone(local_tz)
-                    end_datetime = datetime.combine(booking_date, end_time).astimezone(local_tz)
-                    
-                    logger.info(f"[Time Check] Current: {now.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-                    logger.info(f"[Time Check] Start: {start_datetime.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-                    logger.info(f"[Time Check] End: {end_datetime.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-                    
-                    time_until_start = (start_datetime - now).total_seconds()
-                    time_since_end = (now - end_datetime).total_seconds()
-                    
-                    logger.info(f"[Time Check] Seconds until start: {time_until_start}")
-                    logger.info(f"[Time Check] Seconds since end: {time_since_end}")
-                    
-                    # Only start if we're within 10 seconds of start time or already in the booking window
-                    if time_until_start <= 10 and time_since_end < 0:
-                        if not self.camera_service.is_recording:
-                            logger.info(f"Starting recording for booking {booking['id']} (start in {time_until_start} seconds)")
-                            self.start_recording(booking["id"])
-                            last_booking_id = booking["id"]
-                    elif time_since_end >= 0 and self.camera_service.is_recording:
-                        logger.info(f"Stopping recording for booking {booking['id']} as end time reached ({time_since_end} seconds ago)")
-                        self.stop_recording()
-                        last_booking_id = None
-                elif self.camera_service.is_recording:
-                    logger.info("No booking found but still recording, stopping recording")
-                    self.stop_recording()
-                    last_booking_id = None
-                time.sleep(5)
+                start_time = datetime.fromisoformat(booking["start_time"])
+                end_time = datetime.fromisoformat(booking["end_time"])
+
+                # Check if we are within the booking window
+                if start_time <= now < end_time:
+                    if not self.camera_service.is_recording:
+                        logger.info(f"Inside booking window for {booking['id']}. Starting recording.")
+                        self.camera_service.start_recording(booking)
+                
+                # Check if the booking has ended
+                elif now >= end_time:
+                    if self.camera_service.is_recording:
+                        logger.info(f"Booking {booking['id']} has ended. Stopping recording.")
+                        self.camera_service.stop_recording()
+
+                self.stop_event.wait(1) # Check every second for precision
             except Exception as e:
                 logger.error(f"Error in recording worker: {e}", exc_info=True)
-                time.sleep(5)
+                if self.stop_event.wait(5):
+                    break
 
+    def status_worker(self):
+        """Background thread for updating system status."""
+        while not self.stop_event.is_set():
+            try:
+                update_system_status(is_recording=self.camera_service.is_recording)
+                if self.stop_event.wait(STATUS_UPDATE_INTERVAL):
+                    break
+            except Exception as e:
+                logger.error(f"Error in status worker: {e}", exc_info=True)
+                if self.stop_event.wait(30):
+                    break
+
+    def scheduler_worker(self):
+        """Background thread for checking for the next booking from Supabase."""
+        while not self.stop_event.is_set():
+            try:
+                # Only check for a new booking if one isn't already active
+                if not load_booking():
+                    booking = get_next_booking()
+                    if booking:
+                        logger.info(f"Found next booking: {booking['id']}. Saving locally.")
+                        save_booking(booking)
+                
+                if self.stop_event.wait(BOOKING_CHECK_INTERVAL):
+                    break
+            except Exception as e:
+                logger.error(f"Error in scheduler worker: {e}", exc_info=True)
+                if self.stop_event.wait(60):
+                    break
+    
     def start(self):
-        """Start the orchestrator service."""
-        if not self.camera_service.start():
-            logger.error("Failed to start camera service")
+        if self.is_running:
+            logger.warning("Orchestrator is already running.")
+            return True
+            
+        try:
+            if not self.camera_service.start():
+                logger.error("Failed to start camera service. Aborting.")
+                return False
+
+            self.is_running = True
+            
+            self.scheduler_thread = threading.Thread(target=self.scheduler_worker, daemon=True)
+            self.scheduler_thread.start()
+            
+            self.recording_thread = threading.Thread(target=self.recording_worker, daemon=True)
+            self.recording_thread.start()
+
+            self.status_thread = threading.Thread(target=self.status_worker, daemon=True)
+            self.status_thread.start()
+
+            update_system_status(is_streaming=True)
+            logger.info("EZREC Orchestrator service started successfully.")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to start orchestrator: {e}", exc_info=True)
+            self.is_running = False
             return False
 
-        self.recording_thread = threading.Thread(target=self.recording_worker)
-        self.recording_thread.daemon = True
-        self.recording_thread.start()
-
-        # Update system status
-        update_system_status(is_streaming=True)
-        
-        logger.info("Orchestrator service started")
-        return True
-
     def stop(self):
-        """Stop the orchestrator service."""
+        if not self.is_running:
+            return
+            
+        logger.info("Stopping EZREC Orchestrator...")
         self.stop_event.set()
-        if self.recording_thread:
-            self.recording_thread.join()
-
+        
         if self.camera_service.is_recording:
-            self.stop_recording()
+            self.camera_service.stop_recording()
+
+        if self.scheduler_thread: self.scheduler_thread.join(timeout=5)
+        if self.recording_thread: self.recording_thread.join(timeout=5)
+        if self.status_thread: self.status_thread.join(timeout=5)
 
         self.camera_service.stop()
         
-        # Update system status
         update_system_status(is_streaming=False)
-        
-        logger.info("Orchestrator service stopped")
+        self.is_running = False
+        logger.info("EZREC Orchestrator stopped.")
 
 def main():
-    """Main orchestrator service loop."""
-    orchestrator = Orchestrator()
+    time.sleep(2)
+    os.makedirs(LOG_DIR, exist_ok=True)
+    
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            RotatingFileHandler(
+                os.path.join(LOG_DIR, 'ezrec-orchestrator.log'),
+                maxBytes=10*1024*1024,
+                backupCount=5
+            ),
+            logging.StreamHandler()
+        ]
+    )
+    
+    logger.info("Starting EZREC Backend Orchestrator...")
+    orchestrator = EZRECOrchestrator()
+    
     if not orchestrator.start():
-        return
+        logger.error("Failed to start orchestrator. Shutting down.")
+        sys.exit(1)
 
     try:
-        while True:
+        while orchestrator.is_running:
             time.sleep(1)
     except KeyboardInterrupt:
-        logger.info("Received shutdown signal")
+        logger.info("Keyboard interrupt received.")
     finally:
         orchestrator.stop()
+        logger.info("EZREC Backend Orchestrator shutdown complete.")
 
 if __name__ == "__main__":
     main() 

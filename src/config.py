@@ -11,10 +11,13 @@ TEMP_DIR = BASE_DIR / "temp"
 UPLOAD_DIR = BASE_DIR / "uploads"
 LOG_DIR = BASE_DIR / "logs"
 RECORDING_DIR = BASE_DIR / "recordings"
+ASSETS_DIR = BASE_DIR / "user_assets"
 
 # Create directories if they don't exist
 TEMP_DIR.mkdir(exist_ok=True)
 UPLOAD_DIR.mkdir(exist_ok=True)
+RECORDING_DIR.mkdir(exist_ok=True)
+ASSETS_DIR.mkdir(exist_ok=True)
 
 # Supabase configuration
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -24,6 +27,11 @@ CAMERA_ID = os.getenv("CAMERA_ID", "default_camera")
 CAMERA_NAME = os.getenv("CAMERA_NAME", "Camera")
 CAMERA_LOCATION = os.getenv("CAMERA_LOCATION", "")
 CAMERA_DEVICE = os.getenv("CAMERA_DEVICE")
+
+# Asset Paths
+LOGO_PATH = os.getenv("LOGO_PATH", str(ASSETS_DIR / "logo.png"))
+TRADEMARK_PATH = os.getenv("TRADEMARK_PATH", str(ASSETS_DIR / "trademark.png"))
+INTRO_VIDEO_PATH = os.getenv("INTRO_VIDEO_PATH", str(ASSETS_DIR / "intro.mp4"))
 
 # Camera settings
 CAMERA_INDEX = 0

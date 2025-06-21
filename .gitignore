@@ -51,6 +51,7 @@ log/
 *.wmv
 *.flv
 *.webm
+*.h264
 
 # User assets
 user_assets/
