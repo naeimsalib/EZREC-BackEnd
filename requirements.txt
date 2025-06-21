@@ -20,3 +20,4 @@ psutil==5.9.4
 pytz==2023.3
 ffmpeg-python==0.2.0
 picamera2==0.3.27
+libcamera==0.2.0
