@@ -90,7 +90,8 @@ pip install --upgrade pip
 # Step 5: Fix Supabase compatibility issue
 print_status "Step 5: Installing compatible Supabase version"
 pip uninstall -y supabase gotrue httpx
-pip install supabase==1.0.3 httpx==0.24.1
+pip install httpx==0.23.3
+pip install supabase==1.0.3
 
 # Step 6: Install other dependencies
 print_status "Step 6: Installing other dependencies"
