@@ -9,12 +9,17 @@ cd ~/code/SmartCam-Soccer/backend
 # Activate virtual environment
 source venv/bin/activate
 
-echo "Uninstalling conflicting packages..."
-pip uninstall -y supabase gotrue httpx
+echo "Uninstalling all conflicting packages..."
+pip uninstall -y supabase gotrue httpx supafunc storage3 postgrest httpcore h11
 
-echo "Installing compatible versions..."
-pip install httpx==0.23.3
-pip install supabase==1.0.3
+echo "Installing latest compatible versions..."
+pip install httpx==0.25.2
+pip install httpcore==1.0.9
+pip install h11==0.16.0
+pip install supabase==2.3.5
+pip install supafunc==0.3.3
+pip install storage3==0.7.7
+pip install postgrest==0.15.1
 
 echo "Testing Supabase connection..."
 python3 -c "

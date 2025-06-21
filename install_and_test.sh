@@ -89,9 +89,14 @@ pip install --upgrade pip
 
 # Step 5: Fix Supabase compatibility issue
 print_status "Step 5: Installing compatible Supabase version"
-pip uninstall -y supabase gotrue httpx
-pip install httpx==0.23.3
-pip install supabase==1.0.3
+pip uninstall -y supabase gotrue httpx supafunc storage3 postgrest httpcore h11
+pip install httpx==0.25.2
+pip install httpcore==1.0.9
+pip install h11==0.16.0
+pip install supabase==2.3.5
+pip install supafunc==0.3.3
+pip install storage3==0.7.7
+pip install postgrest==0.15.1
 
 # Step 6: Install other dependencies
 print_status "Step 6: Installing other dependencies"
