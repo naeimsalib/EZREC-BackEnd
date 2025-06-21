@@ -2,7 +2,7 @@ python-dotenv==1.0.0
 
 # Supabase Stack - Compatible versions for Raspberry Pi
 supabase==2.2.1
-gotrue==2.9.1
+gotrue==2.8.0
 postgrest==0.13.0
 storage3==0.7.7
 realtime==1.0.6
@@ -10,7 +10,7 @@ supafunc==0.3.3
 
 # Compatible HTTPX and dependencies for Pi - Fixed to avoid proxy argument error
 httpx==0.27.2
-httpcore==0.17.3
+httpcore==0.18.0
 h11==0.14.0
 
 # System & Camera Dependencies
