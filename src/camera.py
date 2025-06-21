@@ -18,7 +18,6 @@ from .utils import (
     update_system_status,
     get_storage_used,
     remove_booking,
-    remove_booking_from_supabase
 )
 from .config import (
     CAMERA_ID,
@@ -351,27 +350,24 @@ class CameraService:
                 booking_id = self.file_booking_map.get(file_path)
             if booking_id:
                 logger.info(f"[Upload Worker] Removing booking {booking_id} for file: {file_path}")
-                # Remove from Supabase first
-                try:
-                    supabase.table("bookings").delete().eq("id", booking_id).execute()
-                    logger.info(f"[Upload Worker] Booking {booking_id} removed from Supabase")
-                except Exception as e:
-                    logger.error(f"[Upload Worker] Failed to remove booking from Supabase: {e}")
+                # Update booking status in Supabase
+                supabase.table("bookings").update({"status": "completed"}).eq("id", booking_id).execute()
+                logger.info(f"[Upload Worker] Updated booking {booking_id} status to completed.")
                 
-                # Then remove locally
-                remove_booking(booking_id)
-                logger.info(f"[Upload Worker] Booking {booking_id} removed locally")
+                # Also remove local booking file
+                remove_booking()
                 
-                # Update the file-booking map
-                self.file_booking_map.pop(file_path, None)
-                self._save_file_booking_map()
+                # Remove the file to booking association
+                if file_path in self.file_booking_map:
+                    del self.file_booking_map[file_path]
+                    self._save_file_booking_map()
             else:
                 logger.warning(f"[Upload Worker] No booking ID found for file: {file_path}")
         except Exception as e:
             logger.error(f"[Upload Worker] Failed to remove booking for {file_path}: {e}", exc_info=True)
 
     def manual_trigger_upload_queue(self):
-        logger.info("[Upload Worker] Manual trigger: processing upload queue now.")
+        logger.info("Manual upload queue trigger received.")
         self._start_upload_worker()
 
     def start(self):
