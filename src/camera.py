@@ -398,7 +398,7 @@ class CameraService:
         self.stop_worker()
         
         if self.interface:
-            self.interface.close()
+            self.interface.release()
             logger.info("Camera interface closed.")
             
         logger.info("CameraService stopped.")
