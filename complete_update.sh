@@ -38,6 +38,11 @@ echo "EZREC Backend - Final Update"
 echo "============================"
 echo ""
 
+print_status "Pulling latest changes from Git..."
+sudo -u "$SERVICE_USER" git pull
+print_info "✓ Repository is up to date."
+echo ""
+
 # Install system dependencies for camera
 print_status "Installing system dependencies for camera (libcamera)..."
 apt-get update
