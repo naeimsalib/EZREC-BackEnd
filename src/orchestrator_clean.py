@@ -280,6 +280,9 @@ class EZRECOrchestrator:
 
 def main():
     """Main entry point for the EZREC Backend service."""
+    # Add a small delay to allow system resources to stabilize on boot
+    time.sleep(2)
+    
     # Setup logging
     os.makedirs(LOG_DIR, exist_ok=True)
     

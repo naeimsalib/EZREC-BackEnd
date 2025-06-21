@@ -273,7 +273,6 @@ class CameraInterface:
                 self.picam.stop()
             elif self.camera_type == 'opencv' and self.cap:
                 self.cap.release()
-            print("[CameraInterface] Camera released.")
         except Exception as e:
             import traceback
             print(f"[CameraInterface] Exception in release: {e}")
