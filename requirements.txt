@@ -9,9 +9,9 @@ storage3==0.7.7
 realtime==1.0.6
 supafunc==0.3.3
 
-# Use the exact httpx version that supabase expects
+# httpx 0.25.2 requires httpcore>=1.0.0,<2.0.0
 httpx==0.25.2
-httpcore==0.17.3
+httpcore==1.0.2
 h11==0.14.0
 
 # == System & Camera Dependencies ==
