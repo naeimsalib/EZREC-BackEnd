@@ -41,65 +41,52 @@ print_status "Starting comprehensive EZREC Backend fix..."
 
 # Step 1: Stop and clean up any existing services
 print_status "Step 1: Cleaning up existing services..."
-
-# Stop any running services
 systemctl stop ezrec.service 2>/dev/null || true
-systemctl stop ezrec-backend.service 2>/dev/null || true
-systemctl stop smartcam.service 2>/dev/null || true
-
-# Disable services
 systemctl disable ezrec.service 2>/dev/null || true
+systemctl stop ezrec-backend.service 2>/dev/null || true
 systemctl disable ezrec-backend.service 2>/dev/null || true
-systemctl disable smartcam.service 2>/dev/null || true
 
 # Remove old service files
-rm -f /etc/systemd/system/ezrec.service
-rm -f /etc/systemd/system/ezrec-backend.service
-rm -f /etc/systemd/system/smartcam.service
-
-# Reload systemd
+rm -f /etc/systemd/system/ezrec*.service
 systemctl daemon-reload
 
 # Step 2: Fix virtual environment and dependencies
 print_status "Step 2: Fixing virtual environment and dependencies..."
-
 cd "$APP_DIR"
 
 # Remove existing venv
-if [ -d "venv" ]; then
-    print_info "Removing existing virtual environment..."
-    rm -rf venv
-fi
+print_info "Removing existing virtual environment..."
+rm -rf venv
 
-# Create new virtual environment
+# Create new venv
 print_info "Creating new virtual environment..."
 sudo -u "$SERVICE_USER" python3 -m venv venv
 chown -R "$SERVICE_USER:$SERVICE_USER" venv
 
-# Install dependencies with retry logic
+# Install dependencies
 print_info "Installing Python dependencies..."
 sudo -u "$SERVICE_USER" "$APP_DIR/venv/bin/pip" install --upgrade pip
 
-# Try installing with different approaches
-if ! sudo -u "$SERVICE_USER" "$APP_DIR/venv/bin/pip" install -r requirements.txt; then
-    print_warning "First attempt failed, trying with --no-deps..."
-    sudo -u "$SERVICE_USER" "$APP_DIR/venv/bin/pip" install --no-deps -r requirements.txt
-    print_warning "Installing dependencies individually..."
-    sudo -u "$SERVICE_USER" "$APP_DIR/venv/bin/pip" install python-dotenv==1.0.0
-    sudo -u "$SERVICE_USER" "$APP_DIR/venv/bin/pip" install supabase==2.2.1
-    sudo -u "$SERVICE_USER" "$APP_DIR/venv/bin/pip" install postgrest==0.13.0
-    sudo -u "$SERVICE_USER" "$APP_DIR/venv/bin/pip" install httpx==0.24.1
-    sudo -u "$SERVICE_USER" "$APP_DIR/venv/bin/pip" install opencv-python==4.8.1.78
-    sudo -u "$SERVICE_USER" "$APP_DIR/venv/bin/pip" install numpy==1.26.4
-    sudo -u "$SERVICE_USER" "$APP_DIR/venv/bin/pip" install psutil==5.9.4
-    sudo -u "$SERVICE_USER" "$APP_DIR/venv/bin/pip" install pytz==2023.3
-    sudo -u "$SERVICE_USER" "$APP_DIR/venv/bin/pip" install ffmpeg-python==0.2.0
-    sudo -u "$SERVICE_USER" "$APP_DIR/venv/bin/pip" install picamera2==0.3.27
-fi
+# Install with --no-deps first to avoid conflicts
+print_warning "Installing dependencies with conflict resolution..."
+sudo -u "$SERVICE_USER" "$APP_DIR/venv/bin/pip" install -r requirements.txt --no-deps
+
+# Install dependencies individually to resolve conflicts
+print_warning "Installing dependencies individually..."
+sudo -u "$SERVICE_USER" "$APP_DIR/venv/bin/pip" install python-dotenv==1.0.0
+sudo -u "$SERVICE_USER" "$APP_DIR/venv/bin/pip" install supabase==2.2.1
+sudo -u "$SERVICE_USER" "$APP_DIR/venv/bin/pip" install gotrue==2.9.1
+sudo -u "$SERVICE_USER" "$APP_DIR/venv/bin/pip" install postgrest==0.13.0
+sudo -u "$SERVICE_USER" "$APP_DIR/venv/bin/pip" install httpx==0.26.0
+sudo -u "$SERVICE_USER" "$APP_DIR/venv/bin/pip" install opencv-python==4.8.1.78
+sudo -u "$SERVICE_USER" "$APP_DIR/venv/bin/pip" install numpy==1.26.4
+sudo -u "$SERVICE_USER" "$APP_DIR/venv/bin/pip" install psutil==5.9.4
+sudo -u "$SERVICE_USER" "$APP_DIR/venv/bin/pip" install pytz==2023.3
+sudo -u "$SERVICE_USER" "$APP_DIR/venv/bin/pip" install ffmpeg-python==0.2.0
+sudo -u "$SERVICE_USER" "$APP_DIR/venv/bin/pip" install picamera2==0.3.27
 
 # Step 3: Create correct service file
 print_status "Step 3: Creating correct service file..."
-
 cat > /etc/systemd/system/ezrec.service << EOL
 [Unit]
 Description=EZREC Backend Service
@@ -125,7 +112,6 @@ EOL
 
 # Step 4: Create management script
 print_status "Step 4: Creating management script..."
-
 cat > "$APP_DIR/manage.sh" << 'EOL'
 #!/bin/bash
 # EZREC Backend Management Script
@@ -201,39 +187,32 @@ case "$1" in
 esac
 EOL
 
-chmod +x "$APP_DIR/manage.sh"
-chown "$SERVICE_USER:$SERVICE_USER" "$APP_DIR/manage.sh"
-
 # Step 5: Set permissions
 print_status "Step 5: Setting permissions..."
-
+chmod +x "$APP_DIR/manage.sh"
+chown "$SERVICE_USER:$SERVICE_USER" "$APP_DIR/manage.sh"
 chown -R "$SERVICE_USER:$SERVICE_USER" "$APP_DIR"
-chmod -R 755 "$APP_DIR"
-chmod -R 777 "$APP_DIR/temp" "$APP_DIR/recordings" "$APP_DIR/logs" "$APP_DIR/uploads" 2>/dev/null || true
 
-# Step 6: Reload and enable service
+# Step 6: Enable service
 print_status "Step 6: Enabling service..."
-
 systemctl daemon-reload
 systemctl enable ezrec.service
 
-# Step 7: Test the setup
+# Step 7: Test setup
 print_status "Step 7: Testing setup..."
-
-# Test Python imports
-if sudo -u "$SERVICE_USER" "$APP_DIR/venv/bin/python" test_setup.py; then
-    print_status "✅ Setup test passed!"
+if [ -f "$APP_DIR/test_setup.py" ]; then
+    sudo -u "$SERVICE_USER" "$APP_DIR/venv/bin/python" test_setup.py
 else
     print_warning "⚠️ Setup test had issues, but continuing..."
 fi
 
 print_status "Fix completed successfully!"
-echo ""
+
 print_info "Next steps:"
 echo "1. Edit your .env file: sudo nano $APP_DIR/.env"
 echo "2. Start the service: sudo $APP_DIR/manage.sh start"
 echo "3. Check status: sudo $APP_DIR/manage.sh status"
 echo "4. View logs: sudo $APP_DIR/manage.sh logs"
 echo "5. Health check: sudo $APP_DIR/manage.sh health"
-echo ""
+
 print_warning "Make sure to configure your Supabase credentials in $APP_DIR/.env" 
