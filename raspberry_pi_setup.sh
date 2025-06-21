@@ -190,7 +190,7 @@ fi
 print_status "Creating systemd services..."
 
 # Main service
-cat > /etc/systemd/system/ezrec-backend.service << EOL
+cat > /etc/systemd/system/ezrec.service << EOL
 [Unit]
 Description=EZREC Backend Service
 After=network.target
@@ -207,7 +207,7 @@ Restart=always
 RestartSec=10
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=ezrec-backend
+SyslogIdentifier=ezrec
 
 [Install]
 WantedBy=multi-user.target
@@ -218,7 +218,7 @@ systemctl daemon-reload
 
 # Enable services
 print_status "Enabling services..."
-systemctl enable ezrec-backend.service
+systemctl enable ezrec.service
 
 # Set permissions
 print_status "Setting final permissions..."
@@ -238,7 +238,7 @@ $APP_DIR/logs/*.log {
     notifempty
     create 644 $SERVICE_USER $SERVICE_GROUP
     postrotate
-        systemctl reload ezrec-backend.service
+        systemctl reload ezrec.service
     endscript
 }
 EOL
@@ -291,12 +291,12 @@ check_camera() {
 echo "EZREC Backend Health Check"
 echo "========================="
 
-check_service "ezrec-backend.service"
+check_service "ezrec.service"
 check_disk_space
 check_camera
 
 echo ""
-echo "For detailed logs: journalctl -u ezrec-backend.service -f"
+echo "For detailed logs: journalctl -u ezrec.service -f"
 EOL
 
 chmod +x "$APP_DIR/health_check.sh"
@@ -318,30 +318,30 @@ fi
 case "$1" in
     start)
         echo "Starting EZREC Backend service..."
-        systemctl start ezrec-backend.service
+        systemctl start ezrec.service
         ;;
     stop)
         echo "Stopping EZREC Backend service..."
-        systemctl stop ezrec-backend.service
+        systemctl stop ezrec.service
         ;;
     restart)
         echo "Restarting EZREC Backend service..."
-        systemctl restart ezrec-backend.service
+        systemctl restart ezrec.service
         ;;
     status)
         echo "EZREC Backend Service Status:"
-        systemctl status ezrec-backend.service --no-pager
+        systemctl status ezrec.service --no-pager
         ;;
     logs)
         echo "Showing live logs (Ctrl+C to exit)..."
-        journalctl -u ezrec-backend.service -f -n 50 --no-pager
+        journalctl -u ezrec.service -f -n 50 --no-pager
         ;;
     health)
         echo "EZREC Backend Health Check"
         echo "========================="
         
         # Check service
-        if systemctl is-active --quiet "ezrec-backend.service"; then
+        if systemctl is-active --quiet "ezrec.service"; then
             echo "✓ EZREC Service is running"
         else
             echo "✗ EZREC Service is NOT running"
@@ -359,7 +359,7 @@ case "$1" in
         fi
         
         echo ""
-        echo "For detailed logs: journalctl -u ezrec-backend.service -f"
+        echo "For detailed logs: journalctl -u ezrec.service -f"
         ;;
     update)
         echo "Updating EZREC Backend..."
@@ -368,7 +368,7 @@ case "$1" in
         echo "Updating Python dependencies..."
         "$APP_DIR/venv/bin/pip" install -r "$APP_DIR/requirements.txt"
         echo "Restarting service..."
-        sudo systemctl restart ezrec-backend.service
+        sudo systemctl restart ezrec.service
         echo "Update complete!"
         ;;
     *)

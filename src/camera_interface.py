@@ -91,7 +91,7 @@ class CameraInterface:
 
     def _update_system_status(self, is_recording: bool):
         try:
-            from .utils import update_system_status
+            from utils import update_system_status
             update_system_status(is_recording=is_recording)
         except Exception as e:
             print(f"[CameraInterface] Failed to update system status: {e}")
