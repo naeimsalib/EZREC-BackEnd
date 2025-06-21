@@ -14,25 +14,25 @@ Backend services and system components for the EZREC SmartCam Soccer system.
 
 ```bash
 # 1. Clone or pull the latest code
-cd /opt/ezrec-backend || git clone https://github.com/naeimsalib/EZREC-BackEnd.git /opt/ezrec-backend
-cd /opt/ezrec-backend
+cd ~/code/SmartCam-Soccer/backend || git clone https://github.com/naeimsalib/EZREC-BackEnd.git ~/code/SmartCam-Soccer/backend
+cd ~/code/SmartCam-Soccer/backend
 
 # 2. Run the setup script (for fresh install or update)
 sudo ./raspberry_pi_setup.sh
 
 # 3. Edit your .env file if needed
-sudo nano /opt/ezrec-backend/.env
+sudo nano ~/code/SmartCam-Soccer/backend/.env
 
 # 4. Start the system
-sudo /opt/ezrec-backend/manage.sh start
+sudo ~/code/SmartCam-Soccer/backend/manage.sh start
 
 # 5. Check status/logs
-sudo /opt/ezrec-backend/manage.sh status
-sudo /opt/ezrec-backend/manage.sh logs
+sudo ~/code/SmartCam-Soccer/backend/manage.sh status
+sudo ~/code/SmartCam-Soccer/backend/manage.sh logs
 
 # 6. To update in the future
-cd /opt/ezrec-backend
-sudo /opt/ezrec-backend/manage.sh update
+cd ~/code/SmartCam-Soccer/backend
+sudo ~/code/SmartCam-Soccer/backend/manage.sh update
 ```
 
 ---
@@ -91,24 +91,24 @@ sudo ./raspberry_pi_setup.sh
 
 3. Configure environment variables:
 ```bash
-sudo nano /opt/ezrec-backend/.env
+sudo nano ~/code/SmartCam-Soccer/backend/.env
 ```
 
 4. Start the system:
 ```bash
-sudo /opt/ezrec-backend/manage.sh start
+sudo ~/code/SmartCam-Soccer/backend/manage.sh start
 ```
 
 5. Check status/logs:
 ```bash
-sudo /opt/ezrec-backend/manage.sh status
-sudo /opt/ezrec-backend/manage.sh logs
+sudo ~/code/SmartCam-Soccer/backend/manage.sh status
+sudo ~/code/SmartCam-Soccer/backend/manage.sh logs
 ```
 
 6. Update in the future:
 ```bash
-cd /opt/ezrec-backend
-sudo /opt/ezrec-backend/manage.sh update
+cd ~/code/SmartCam-Soccer/backend
+sudo ~/code/SmartCam-Soccer/backend/manage.sh update
 ```
 
 ---
@@ -124,11 +124,11 @@ sudo /opt/ezrec-backend/manage.sh update
 
 - If you encounter issues, use the health check:
 ```bash
-sudo /opt/ezrec-backend/manage.sh health
+sudo ~/code/SmartCam-Soccer/backend/manage.sh health
 ```
 - Check logs for errors:
 ```bash
-sudo /opt/ezrec-backend/manage.sh logs
+sudo ~/code/SmartCam-Soccer/backend/manage.sh logs
 ```
 - Ensure your `.env` file is correct and all permissions are set as per the setup script.
 

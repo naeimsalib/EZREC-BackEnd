@@ -130,4 +130,4 @@ test_*.py
 *.backup
 
 # Pi runtime folders
-/opt/ezrec-backend/ 
+/home/michomanoly14892/code/SmartCam-Soccer/backend/ 

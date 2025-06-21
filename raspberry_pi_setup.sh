@@ -44,11 +44,12 @@ fi
 
 # Configuration
 APP_NAME="EZREC-Backend"
-APP_DIR="/opt/ezrec-backend"
-SERVICE_USER="ezrec"
-SERVICE_GROUP="ezrec"
+APP_DIR="/home/michomanoly14892/code/SmartCam-Soccer/backend"
+SERVICE_USER="michomanoly14892"
+SERVICE_GROUP="michomanoly14892"
 
 print_status "Starting EZREC Backend installation on Raspberry Pi..."
+print_info "Using directory: $APP_DIR"
 
 # Update system
 print_status "Updating system packages..."
@@ -89,24 +90,25 @@ apt-get install -y \
     curl \
     wget
 
-# Create service user
-print_status "Creating service user..."
+# Create service user (use existing user)
+print_status "Setting up service user..."
 if ! id "$SERVICE_USER" &>/dev/null; then
-    useradd -r -s /bin/bash -d "$APP_DIR" -m "$SERVICE_USER"
-    usermod -a -G video "$SERVICE_USER"
-    print_status "Created user: $SERVICE_USER"
+    print_error "User $SERVICE_USER does not exist. Please create the user first or update the script."
+    exit 1
 else
-    print_info "User $SERVICE_USER already exists"
+    print_info "Using existing user: $SERVICE_USER"
+    # Ensure user is in video group for camera access
+    usermod -a -G video "$SERVICE_USER" 2>/dev/null || true
 fi
 
-# Create application directory
+# Ensure application directory exists and has correct permissions
 print_status "Setting up application directory..."
-mkdir -p "$APP_DIR"
-chown -R "$SERVICE_USER:$SERVICE_GROUP" "$APP_DIR"
+if [ ! -d "$APP_DIR" ]; then
+    print_error "Directory $APP_DIR does not exist. Please clone the repository first."
+    exit 1
+fi
 
-# Copy application files
-print_status "Copying application files..."
-cp -r . "$APP_DIR/"
+# Set ownership to the user
 chown -R "$SERVICE_USER:$SERVICE_GROUP" "$APP_DIR"
 
 # Create necessary directories
@@ -121,7 +123,19 @@ chown -R "$SERVICE_USER:$SERVICE_GROUP" "$APP_DIR"
 # Setup Python environment
 print_status "Setting up Python virtual environment..."
 cd "$APP_DIR"
+
+# Remove existing venv if it exists and recreate
+if [ -d "venv" ]; then
+    print_info "Removing existing virtual environment..."
+    rm -rf venv
+fi
+
+# Create virtual environment as the user
 sudo -u "$SERVICE_USER" python3 -m venv venv
+chown -R "$SERVICE_USER:$SERVICE_GROUP" venv
+
+# Install dependencies as the service user
+print_status "Installing Python dependencies..."
 sudo -u "$SERVICE_USER" "$APP_DIR/venv/bin/pip" install --upgrade pip
 sudo -u "$SERVICE_USER" "$APP_DIR/venv/bin/pip" install -r requirements.txt
 
@@ -159,6 +173,17 @@ LOG_LEVEL=INFO
 EOL
     chown "$SERVICE_USER:$SERVICE_GROUP" "$APP_DIR/.env"
     print_warning "Please edit $APP_DIR/.env with your actual configuration"
+fi
+
+# Fix git ownership issues
+print_status "Fixing git ownership..."
+cd "$APP_DIR"
+if [ -d ".git" ]; then
+    git config --global --add safe.directory "$APP_DIR"
+    chown -R "$SERVICE_USER:$SERVICE_GROUP" .git
+    print_info "✓ Git ownership fixed"
+else
+    print_warning "No .git directory found (not a git repository)"
 fi
 
 # Create systemd service files
@@ -303,8 +328,8 @@ cat > "$APP_DIR/health_check.sh" << 'EOL'
 #!/bin/bash
 # Health check script for EZREC Backend
 
-APP_DIR="/opt/ezrec-backend"
-SERVICE_USER="ezrec"
+APP_DIR="/home/michomanoly14892/code/SmartCam-Soccer/backend"
+SERVICE_USER="michomanoly14892"
 
 # Check if services are running
 check_service() {
@@ -358,48 +383,74 @@ EOL
 
 chmod +x "$APP_DIR/health_check.sh"
 
-# Create management script
-print_status "Creating management script..."
+# Create the simplified management script
+print_status "Creating simplified management script..."
 cat > "$APP_DIR/manage.sh" << 'EOL'
 #!/bin/bash
 # EZREC Backend Management Script
 
-APP_DIR="/opt/ezrec-backend"
-SERVICE_USER="ezrec"
+APP_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+
+# Ensure the script is run with sudo for service commands
+if [[ $EUID -ne 0 ]] && [[ "$1" == "start" || "$1" == "stop" || "$1" == "restart" ]]; then
+   echo "This command must be run with sudo." 
+   exit 1
+fi
 
 case "$1" in
     start)
-        echo "Starting EZREC Backend services..."
-        systemctl start ezrec-backend.service
+        echo "Starting EZREC Backend service..."
+        systemctl start ezrec.service
         ;;
     stop)
-        echo "Stopping EZREC Backend services..."
-        systemctl stop ezrec-backend.service
+        echo "Stopping EZREC Backend service..."
+        systemctl stop ezrec.service
         ;;
     restart)
-        echo "Restarting EZREC Backend services..."
-        systemctl restart ezrec-backend.service
+        echo "Restarting EZREC Backend service..."
+        systemctl restart ezrec.service
         ;;
     status)
         echo "EZREC Backend Service Status:"
-        systemctl status ezrec-backend.service --no-pager
-        echo ""
-        echo "All EZREC Services:"
-        systemctl status ezrec-*.service --no-pager
+        systemctl status ezrec.service --no-pager
         ;;
     logs)
-        echo "Showing recent logs..."
-        journalctl -u ezrec-backend.service -f
+        echo "Showing live logs (Ctrl+C to exit)..."
+        journalctl -u ezrec.service -f -n 50 --no-pager
         ;;
     health)
-        "$APP_DIR/health_check.sh"
+        echo "EZREC Backend Health Check"
+        echo "========================="
+        
+        # Check service
+        if systemctl is-active --quiet "ezrec.service"; then
+            echo "✓ EZREC Service is running"
+        else
+            echo "✗ EZREC Service is NOT running"
+        fi
+        
+        # Check disk space
+        usage=$(df -h "$APP_DIR" | tail -1 | awk '{print $5}')
+        echo "✓ Disk space usage: ${usage}"
+        
+        # Check camera
+        if v4l2-ctl --list-devices 2>/dev/null | grep -q "video"; then
+            echo "✓ Camera detected"
+        else
+            echo "✗ No camera detected"
+        fi
+        
+        echo ""
+        echo "For detailed logs: journalctl -u ezrec.service -f"
         ;;
     update)
         echo "Updating EZREC Backend..."
         cd "$APP_DIR"
         git pull
-        sudo -u "$SERVICE_USER" "$APP_DIR/venv/bin/pip" install -r requirements.txt
-        systemctl restart ezrec-backend.service
+        echo "Updating Python dependencies..."
+        "$APP_DIR/venv/bin/pip" install -r "$APP_DIR/requirements.txt"
+        echo "Restarting service..."
+        sudo systemctl restart ezrec.service
         echo "Update complete!"
         ;;
     *)
@@ -408,8 +459,10 @@ case "$1" in
         ;;
 esac
 EOL
-
 chmod +x "$APP_DIR/manage.sh"
+chown "$SERVICE_USER:$SERVICE_GROUP" "$APP_DIR/manage.sh"
+print_info "✓ Created manage.sh"
+echo ""
 
 print_status "Installation completed successfully!"
 echo ""

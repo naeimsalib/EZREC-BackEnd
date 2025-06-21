@@ -5,8 +5,8 @@ from pathlib import Path
 # Load environment variables
 load_dotenv()
 
-# Pi-optimized: Default to /opt/ezrec-backend if not overridden
-BASE_DIR = Path(os.getenv("EZREC_BASE_DIR", "/opt/ezrec-backend"))
+# Pi-optimized: Default to user's directory if not overridden
+BASE_DIR = Path(os.getenv("EZREC_BASE_DIR", "/home/michomanoly14892/code/SmartCam-Soccer/backend"))
 TEMP_DIR = BASE_DIR / "temp"
 UPLOAD_DIR = BASE_DIR / "uploads"
 LOG_DIR = BASE_DIR / "logs"
