@@ -103,6 +103,19 @@ EOL
 print_info "✓ .env file is now correct."
 echo ""
 
+# Create or recreate Python virtual environment to ensure it's clean
+print_status "Creating Python virtual environment..."
+sudo -u "$SERVICE_USER" python3 -m venv "$EXISTING_DIR/venv"
+print_info "✓ Virtual environment created."
+echo ""
+
+# Install/update Python dependencies into the virtual environment
+print_status "Installing Python dependencies..."
+sudo -u "$SERVICE_USER" "$EXISTING_DIR/venv/bin/pip" install --upgrade pip
+sudo -u "$SERVICE_USER" "$EXISTING_DIR/venv/bin/pip" install -r "$EXISTING_DIR/requirements.txt"
+print_info "✓ Python dependencies installed."
+echo ""
+
 # Create the single, unified systemd service
 print_status "Creating unified systemd service..."
 cat > /etc/systemd/system/ezrec.service << EOL
