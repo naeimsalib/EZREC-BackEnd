@@ -74,18 +74,21 @@ for device in /dev/video0 /dev/video1 /dev/video2 /dev/video3 /dev/video4; do
     python3 -c "
 import cv2
 import time
+import sys
+
+device_path = '$device'
 
 try:
-    print(f'Testing {device}...')
+    print(f'Testing {device_path}...')
     
     # Try different camera backends
     backends = [cv2.CAP_V4L2, cv2.CAP_V4L, cv2.CAP_ANY]
     
     for backend in backends:
         try:
-            cap = cv2.VideoCapture(f'{device}', backend)
+            cap = cv2.VideoCapture(device_path, backend)
             if cap.isOpened():
-                print(f'  ✅ {device} opened with backend {backend}')
+                print(f'  ✅ {device_path} opened with backend {backend}')
                 
                 # Set camera properties
                 cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
@@ -95,23 +98,23 @@ try:
                 # Try to read a frame
                 ret, frame = cap.read()
                 if ret:
-                    print(f'  ✅ {device} can capture frames - Size: {frame.shape}')
+                    print(f'  ✅ {device_path} can capture frames - Size: {frame.shape}')
                     cap.release()
-                    exit(0)
+                    sys.exit(0)
                 else:
-                    print(f'  ❌ {device} cannot capture frames')
+                    print(f'  ❌ {device_path} cannot capture frames')
                     cap.release()
             else:
-                print(f'  ❌ {device} not accessible with backend {backend}')
+                print(f'  ❌ {device_path} not accessible with backend {backend}')
         except Exception as e:
-            print(f'  ❌ {device} failed with backend {backend}: {str(e)}')
+            print(f'  ❌ {device_path} failed with backend {backend}: {str(e)}')
     
-    print(f'  ❌ {device} failed with all backends')
-    exit(1)
+    print(f'  ❌ {device_path} failed with all backends')
+    sys.exit(1)
     
 except Exception as e:
-    print(f'  ❌ {device} test failed: {str(e)}')
-    exit(1)
+    print(f'  ❌ {device_path} test failed: {str(e)}')
+    sys.exit(1)
 "
     
     if [ $? -eq 0 ]; then
@@ -203,11 +206,7 @@ echo ""
 echo "Step 8: Recommendations"
 echo "======================"
 
-if [ -n "$WORKING_CAMERA" ]; then
-    print_success "Working camera found: $WORKING_CAMERA"
-    echo "Update your .env file with:"
-    echo "CAMERA_DEVICE=$WORKING_CAMERA"
-else
+if [ -z "$WORKING_CAMERA" ]; then
     print_error "No working camera found"
     echo ""
     echo "Troubleshooting steps:"
@@ -216,6 +215,8 @@ else
     echo "3. Check camera connection"
     echo "4. Try different camera device"
     echo "5. Check if camera is being used by another process"
+else
+    print_success "Working camera found: $WORKING_CAMERA"
 fi
 
 echo ""
