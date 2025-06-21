@@ -39,7 +39,9 @@ echo "============================"
 echo ""
 
 print_status "Pulling latest changes from Git..."
-sudo -u "$SERVICE_USER" git pull
+# Use runuser for a more robust way to run a command as a different user from a root script.
+# This avoids potential tty and environment issues with nested sudo.
+runuser -l "$SERVICE_USER" -c "cd '$EXISTING_DIR' && git pull"
 print_info "✓ Repository is up to date."
 echo ""
 
