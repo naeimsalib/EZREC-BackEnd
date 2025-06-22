@@ -19,5 +19,4 @@ numpy==1.26.4
 psutil==5.9.4
 pytz==2023.3
 ffmpeg-python==0.2.0
-picamera2==0.3.27
-# Note: libcamera is provided by system package python3-libcamera, not via pip
+# Note: libcamera and picamera2 are provided by system packages python3-libcamera and python3-picamera2, not via pip
