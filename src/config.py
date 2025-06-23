@@ -1,12 +1,46 @@
+#!/usr/bin/env python3
+"""
+EZREC Backend Configuration - Optimized for Raspberry Pi
+Handles environment variables, paths, and system configuration
+"""
 import os
-from dotenv import load_dotenv
+import logging
 from pathlib import Path
+from dotenv import load_dotenv
 
-# Load environment variables
+# Load environment variables from .env file
 load_dotenv()
 
-# Pi-optimized: Default to user's directory if not overridden
-BASE_DIR = Path(os.getenv("EZREC_BASE_DIR", "/home/michomanoly14892/code/SmartCam-Soccer/backend"))
+def get_env_var(name: str, default=None, required=False, var_type=str):
+    """Get environment variable with validation and type conversion."""
+    value = os.getenv(name, default)
+    
+    if required and value is None:
+        raise ValueError(f"Required environment variable {name} is not set")
+    
+    if value is None:
+        return default
+        
+    # Type conversion
+    if var_type == bool:
+        return value.lower() in ('true', '1', 'yes', 'on')
+    elif var_type == int:
+        try:
+            return int(value)
+        except ValueError:
+            logging.warning(f"Invalid integer value for {name}: {value}, using default: {default}")
+            return default
+    elif var_type == float:
+        try:
+            return float(value)
+        except ValueError:
+            logging.warning(f"Invalid float value for {name}: {value}, using default: {default}")
+            return default
+    
+    return var_type(value)
+
+# Base Directory Configuration
+BASE_DIR = Path(get_env_var("EZREC_BASE_DIR", "/opt/ezrec-backend"))
 TEMP_DIR = BASE_DIR / "temp"
 UPLOAD_DIR = BASE_DIR / "uploads"
 LOG_DIR = BASE_DIR / "logs"
@@ -14,43 +48,101 @@ RECORDING_DIR = BASE_DIR / "recordings"
 ASSETS_DIR = BASE_DIR / "user_assets"
 
 # Create directories if they don't exist
-TEMP_DIR.mkdir(exist_ok=True)
-UPLOAD_DIR.mkdir(exist_ok=True)
-RECORDING_DIR.mkdir(exist_ok=True)
-ASSETS_DIR.mkdir(exist_ok=True)
+for directory in [TEMP_DIR, UPLOAD_DIR, LOG_DIR, RECORDING_DIR, ASSETS_DIR]:
+    directory.mkdir(parents=True, exist_ok=True)
 
-# Supabase configuration
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_SERVICE_KEY")
-USER_ID = os.getenv("USER_ID")
-CAMERA_ID = os.getenv("CAMERA_ID", "default_camera")
-CAMERA_NAME = os.getenv("CAMERA_NAME", "Camera")
-CAMERA_LOCATION = os.getenv("CAMERA_LOCATION", "")
-CAMERA_DEVICE = os.getenv("CAMERA_DEVICE")
+# Supabase Configuration (Required)
+SUPABASE_URL = get_env_var("SUPABASE_URL", required=True)
+SUPABASE_KEY = get_env_var("SUPABASE_SERVICE_ROLE_KEY") or get_env_var("SUPABASE_SERVICE_KEY", required=True)
+
+# User Configuration (Required)
+USER_ID = get_env_var("USER_ID", required=True)
+USER_EMAIL = get_env_var("USER_EMAIL", "user@example.com")
+
+# Camera Configuration
+CAMERA_ID = get_env_var("CAMERA_ID", "raspberry_pi_camera")
+CAMERA_NAME = get_env_var("CAMERA_NAME", "Raspberry Pi Camera")
+CAMERA_LOCATION = get_env_var("CAMERA_LOCATION", "Unknown Location")
+CAMERA_DEVICE = get_env_var("CAMERA_DEVICE", "/dev/video0")
+
+# Camera Settings - Optimized for Pi Camera
+CAMERA_INDEX = get_env_var("CAMERA_INDEX", 0, var_type=int)
+PREVIEW_WIDTH = get_env_var("PREVIEW_WIDTH", 640, var_type=int)
+PREVIEW_HEIGHT = get_env_var("PREVIEW_HEIGHT", 480, var_type=int)
+RECORD_WIDTH = get_env_var("RECORD_WIDTH", 1920, var_type=int)
+RECORD_HEIGHT = get_env_var("RECORD_HEIGHT", 1080, var_type=int)
+PREVIEW_FPS = get_env_var("PREVIEW_FPS", 24, var_type=int)
+RECORD_FPS = get_env_var("RECORD_FPS", 30, var_type=int)
+
+# Hardware Encoder for Pi
+HARDWARE_ENCODER = get_env_var("HARDWARE_ENCODER", "h264_omx")
+
+# Recording Configuration
+MAX_RECORDING_DURATION = get_env_var("MAX_RECORDING_DURATION", 7200, var_type=int)  # 2 hours
+MIN_RECORDING_DURATION = get_env_var("MIN_RECORDING_DURATION", 300, var_type=int)   # 5 minutes
+RECORDING_BITRATE = get_env_var("RECORDING_BITRATE", 10000000, var_type=int)        # 10Mbps
+
+# System Update Intervals
+STATUS_UPDATE_INTERVAL = get_env_var("STATUS_UPDATE_INTERVAL", 15, var_type=int)
+BOOKING_CHECK_INTERVAL = get_env_var("BOOKING_CHECK_INTERVAL", 60, var_type=int)
+HEARTBEAT_INTERVAL = get_env_var("HEARTBEAT_INTERVAL", 30, var_type=int)
 
 # Asset Paths
-LOGO_PATH = os.getenv("LOGO_PATH", str(ASSETS_DIR / "logo.png"))
-TRADEMARK_PATH = os.getenv("TRADEMARK_PATH", str(ASSETS_DIR / "trademark.png"))
-INTRO_VIDEO_PATH = os.getenv("INTRO_VIDEO_PATH", str(ASSETS_DIR / "intro.mp4"))
+LOGO_PATH = get_env_var("LOGO_PATH", str(ASSETS_DIR / "logo.png"))
+TRADEMARK_PATH = get_env_var("TRADEMARK_PATH", str(ASSETS_DIR / "trademark.png"))
+INTRO_VIDEO_PATH = get_env_var("INTRO_VIDEO_PATH", str(ASSETS_DIR / "intro.mp4"))
 
-# Camera settings
-CAMERA_INDEX = 0
-PREVIEW_WIDTH = 640
-PREVIEW_HEIGHT = 480
-RECORD_WIDTH = 1280
-RECORD_HEIGHT = 720
-PREVIEW_FPS = 24
-RECORD_FPS = 30
-HARDWARE_ENCODER = "h264_omx"
+# System Configuration
+DEBUG = get_env_var("DEBUG", False, var_type=bool)
+LOG_LEVEL = get_env_var("LOG_LEVEL", "INFO")
+LOG_MAX_BYTES = get_env_var("LOG_MAX_BYTES", 10*1024*1024, var_type=int)  # 10MB
+LOG_BACKUP_COUNT = get_env_var("LOG_BACKUP_COUNT", 5, var_type=int)
 
-# Recording settings
-MAX_RECORDING_DURATION = 7200  # 2 hours in seconds
-MIN_RECORDING_DURATION = 300   # 5 minutes in seconds
+# Network Configuration
+NETWORK_TIMEOUT = get_env_var("NETWORK_TIMEOUT", 30, var_type=int)
+UPLOAD_RETRY_COUNT = get_env_var("UPLOAD_RETRY_COUNT", 3, var_type=int)
+UPLOAD_RETRY_DELAY = get_env_var("UPLOAD_RETRY_DELAY", 60, var_type=int)
 
-# Status update intervals
-STATUS_UPDATE_INTERVAL = 15  # seconds
-BOOKING_CHECK_INTERVAL = 60  # seconds
-
-# File paths
+# File paths for internal use
 NEXT_BOOKING_FILE = TEMP_DIR / "next_booking.json"
-UPLOAD_QUEUE_FILE = TEMP_DIR / "to_upload.txt" 
+CURRENT_BOOKING_FILE = TEMP_DIR / "current_booking.json"
+UPLOAD_QUEUE_FILE = TEMP_DIR / "upload_queue.json"
+SYSTEM_STATUS_FILE = TEMP_DIR / "system_status.json"
+
+# Validate critical configuration
+def validate_config():
+    """Validate critical configuration values."""
+    errors = []
+    
+    if not SUPABASE_URL:
+        errors.append("SUPABASE_URL is required")
+    if not SUPABASE_KEY:
+        errors.append("SUPABASE_SERVICE_ROLE_KEY is required")
+    if not USER_ID:
+        errors.append("USER_ID is required")
+    
+    if RECORD_WIDTH <= 0 or RECORD_HEIGHT <= 0:
+        errors.append("Invalid recording dimensions")
+    if RECORD_FPS <= 0 or RECORD_FPS > 60:
+        errors.append("Invalid recording FPS (must be 1-60)")
+    
+    if errors:
+        raise ValueError(f"Configuration errors: {', '.join(errors)}")
+
+# Run validation on import
+try:
+    validate_config()
+except ValueError as e:
+    logging.error(f"Configuration validation failed: {e}")
+    # Don't raise in production to avoid service failures
+    if DEBUG:
+        raise
+
+# Export configuration summary for logging
+CONFIG_SUMMARY = {
+    "base_dir": str(BASE_DIR),
+    "camera_id": CAMERA_ID,
+    "record_resolution": f"{RECORD_WIDTH}x{RECORD_HEIGHT}@{RECORD_FPS}fps",
+    "debug_mode": DEBUG,
+    "log_level": LOG_LEVEL,
+} 

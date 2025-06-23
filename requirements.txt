@@ -1,4 +1,10 @@
+# EZREC Backend Dependencies (Optimized for Raspberry Pi)
+# Last updated: 2024
+
+# Core Dependencies
 python-dotenv==1.0.0
+psutil==5.9.8
+pytz==2024.1
 
 # Supabase Stack - Compatible versions for Raspberry Pi
 supabase==2.2.1
@@ -8,15 +14,23 @@ storage3==0.7.7
 realtime==1.0.6
 supafunc==0.3.3
 
-# Compatible HTTPX and dependencies for Pi - Fixed to avoid proxy argument error
+# HTTP Client Stack - Fixed versions to avoid compatibility issues
 httpx==0.24.1
 httpcore==0.17.3
 h11==0.14.0
 
-# System & Camera Dependencies
+# Computer Vision & Media Processing
 opencv-python==4.8.1.78
 numpy==1.26.4
-psutil==5.9.4
-pytz==2023.3
 ffmpeg-python==0.2.0
-# Note: libcamera and picamera2 are provided by system packages python3-libcamera and python3-picamera2, not via pip
+
+# Testing Framework (optional)
+pytest==7.4.3
+pytest-asyncio==0.21.1
+
+# Note: System packages required on Raspberry Pi:
+# - python3-libcamera
+# - python3-picamera2  
+# - ffmpeg
+# - v4l-utils
+# Install with: sudo apt install python3-libcamera python3-picamera2 ffmpeg v4l-utils

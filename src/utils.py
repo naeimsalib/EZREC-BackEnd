@@ -1,126 +1,175 @@
 #!/usr/bin/env python3
+"""
+EZREC Backend Utilities - Optimized for Raspberry Pi
+Enhanced logging, system monitoring, and utility functions
+"""
 import logging
 import logging.handlers
 import socket
 import json
 import os
 import sys
-from datetime import datetime
-import pytz
-from typing import Optional, Dict, Any, List
-from supabase import create_client, Client
 import time
 import threading
+from datetime import datetime
+from typing import Optional, Dict, Any, List
+import pytz
 import psutil
 import cv2
 
-# Add the src directory to the Python path so we can import our modules
+# Add the src directory to the Python path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from config import (
-    SUPABASE_URL,
-    SUPABASE_KEY,
-    USER_ID,
-    LOG_DIR,
-    TEMP_DIR,
-    RECORDING_DIR,
-    CAMERA_ID
+    SUPABASE_URL, SUPABASE_KEY, USER_ID, LOG_DIR, TEMP_DIR, 
+    RECORDING_DIR, CAMERA_ID, LOG_MAX_BYTES, LOG_BACKUP_COUNT,
+    LOG_LEVEL, DEBUG
 )
 
-# Initialize Supabase client
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+# Supabase client setup with error handling
+try:
+    from supabase import create_client, Client
+    supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+except Exception as e:
+    print(f"Warning: Failed to initialize Supabase client: {e}")
+    supabase = None
+
+# Global logger instance
+logger = None
 
 def get_local_timezone():
     """Get the local timezone name."""
     return datetime.now().astimezone().tzinfo
 
-# Setup logging with local timezone
+class LocalTimeFormatter(logging.Formatter):
+    """Custom formatter that uses local time instead of UTC."""
+    
+    def converter(self, timestamp):
+        dt = datetime.fromtimestamp(timestamp)
+        return dt.astimezone()
+        
+    def formatTime(self, record, datefmt=None):
+        dt = self.converter(record.created)
+        if datefmt:
+            return dt.strftime(datefmt)
+        return dt.strftime('%Y-%m-%d %H:%M:%S %z')
+
 def setup_logging():
-    """Configure logging with both file and console handlers using local timezone."""
+    """Configure enhanced logging with rotation and proper formatting."""
+    global logger
+    
+    if logger is not None:
+        return logger
+    
+    # Ensure log directory exists
     os.makedirs(LOG_DIR, exist_ok=True)
     
-    logger = logging.getLogger()
-    logger.setLevel(logging.INFO)
+    # Create logger
+    logger = logging.getLogger('ezrec')
+    logger.setLevel(getattr(logging, LOG_LEVEL.upper()))
     
-    # Custom formatter that uses local time
-    class LocalTimeFormatter(logging.Formatter):
-        def converter(self, timestamp):
-            dt = datetime.fromtimestamp(timestamp)
-            return dt.astimezone()
-            
-        def formatTime(self, record, datefmt=None):
-            dt = self.converter(record.created)
-            if datefmt:
-                return dt.strftime(datefmt)
-            return dt.strftime('%Y-%m-%d %H:%M:%S %z')
+    # Prevent duplicate handlers
+    if logger.handlers:
+        return logger
     
     # File handler with rotation
     file_handler = logging.handlers.RotatingFileHandler(
-        os.path.join(LOG_DIR, 'smartcam.log'),
-        maxBytes=10*1024*1024,  # 10MB
-        backupCount=5
+        os.path.join(LOG_DIR, 'ezrec.log'),
+        maxBytes=LOG_MAX_BYTES,
+        backupCount=LOG_BACKUP_COUNT
     )
     file_handler.setFormatter(LocalTimeFormatter(
-        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        '%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s'
     ))
     
-    # Console handler
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(LocalTimeFormatter(
-        '%(asctime)s - %(levelname)s - %(message)s'
-    ))
+    # Console handler (only if not in systemd)
+    if not os.getenv('JOURNAL_STREAM'):
+        console_handler = logging.StreamHandler()
+        console_handler.setFormatter(LocalTimeFormatter(
+            '%(asctime)s - %(levelname)s - %(message)s'
+        ))
+        logger.addHandler(console_handler)
     
     logger.addHandler(file_handler)
-    logger.addHandler(console_handler)
+    
+    # Log startup information
+    logger.info("="*60)
+    logger.info("EZREC Backend Logging Initialized")
+    logger.info(f"Log Level: {LOG_LEVEL}")
+    logger.info(f"Debug Mode: {DEBUG}")
+    logger.info(f"Log Directory: {LOG_DIR}")
+    logger.info("="*60)
     
     return logger
 
+# Initialize logging on import
 logger = setup_logging()
+
+def get_system_metrics() -> Dict[str, Any]:
+    """Collect comprehensive system metrics."""
+    try:
+        metrics = {
+            # CPU metrics
+            "cpu_usage_percent": psutil.cpu_percent(interval=0.5),
+            "cpu_count": psutil.cpu_count(),
+            "load_average": os.getloadavg() if hasattr(os, 'getloadavg') else None,
+            
+            # Memory metrics
+            "memory_usage_percent": psutil.virtual_memory().percent,
+            "memory_total_gb": round(psutil.virtual_memory().total / (1024**3), 2),
+            "memory_available_gb": round(psutil.virtual_memory().available / (1024**3), 2),
+            
+            # Disk metrics
+            "disk_usage_percent": psutil.disk_usage("/").percent,
+            "disk_total_gb": round(psutil.disk_usage("/").total / (1024**3), 2),
+            "disk_free_gb": round(psutil.disk_usage("/").free / (1024**3), 2),
+            
+            # System info
+            "uptime_seconds": int(time.time() - psutil.boot_time()),
+            "active_processes": len(psutil.pids()),
+            
+            # Network metrics
+            "network_io": psutil.net_io_counters()._asdict() if psutil.net_io_counters() else {},
+            
+            # Temperature (Pi-specific)
+            "temperature_celsius": get_cpu_temperature(),
+        }
+        
+        # Filter out None values
+        return {k: v for k, v in metrics.items() if v is not None}
+        
+    except Exception as e:
+        logger.error(f"Error collecting system metrics: {e}")
+        return {}
 
 def get_cpu_temperature() -> Optional[float]:
     """Get CPU temperature from Raspberry Pi sensor."""
     try:
-        # For Raspberry Pi, the temperature is in /sys/class/thermal/thermal_zone0/temp
-        # The value is in millidegrees Celsius, so we divide by 1000.
+        # Raspberry Pi thermal sensor
         with open("/sys/class/thermal/thermal_zone0/temp", "r") as f:
             temp = int(f.read().strip()) / 1000.0
-        return temp
+        return round(temp, 1)
     except FileNotFoundError:
-        # This will happen on non-Raspberry Pi systems.
-        logger.info("Temperature sensor not found. Skipping temperature reading.")
+        # Not a Raspberry Pi or sensor not available
         return None
     except Exception as e:
-        logger.error(f"Could not read temperature: {e}")
+        logger.warning(f"Could not read temperature: {e}")
         return None
 
-def get_disk_usage(path: str = "/") -> float:
-    """Get disk usage percentage for the given path."""
-    return psutil.disk_usage(path).percent
-
-def get_uptime() -> int:
-    """Get system uptime in seconds."""
-    return int(time.time() - psutil.boot_time())
-
-def get_active_processes() -> int:
-    """Get the number of active processes."""
-    return len(psutil.pids())
-
-def get_network_errors() -> int:
-    """Get total network errors (inbound and outbound)."""
-    net_io = psutil.net_io_counters()
-    return net_io.errin + net_io.errout
-
-def get_ip() -> str:
-    """Get the local IP address."""
+def get_ip_address() -> str:
+    """Get the local IP address with fallback."""
     try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-        s.close()
+        # Try to connect to a remote address to determine local IP
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
         return ip
-    except Exception as e:
-        logger.error(f"Failed to get IP address: {e}")
-        return "127.0.0.1"
+    except Exception:
+        try:
+            # Fallback: get IP from hostname
+            return socket.gethostbyname(socket.gethostname())
+        except Exception:
+            return "127.0.0.1"
 
 def local_now():
     """Get current datetime in local timezone."""
@@ -131,371 +180,404 @@ def update_system_status(
     is_streaming: bool = False,
     storage_used: int = 0,
     last_backup: Optional[str] = None,
-    recording_errors: int = 0
+    recording_errors: int = 0,
+    **kwargs
 ) -> bool:
     """
-    Collects a comprehensive set of system metrics and upserts them to the
-    system_status table in Supabase.
+    Enhanced system status update with comprehensive metrics and error handling.
     """
+    if not supabase:
+        logger.warning("Supabase client not available, skipping status update")
+        return False
+    
     try:
-        # 1. Collect all system metrics
+        # Get current timestamp
         now = local_now()
         
+        # Collect system metrics
+        metrics = get_system_metrics()
+        
+        # Build comprehensive status data
         system_data = {
             "user_id": USER_ID,
+            "camera_id": CAMERA_ID,
             "last_seen": now.isoformat(),
+            "ip_address": get_ip_address(),
+            "pi_active": True,
             
-            # Core metrics for system health
-            "cpu_usage_percent": psutil.cpu_percent(interval=0.5),
-            "memory_usage_percent": psutil.virtual_memory().percent,
-            "disk_usage_percent": get_disk_usage(),
-            "temperature_celsius": get_cpu_temperature(),
-            "uptime_seconds": get_uptime(),
-            "active_processes": get_active_processes(),
-            "network_errors": get_network_errors(),
-            "recording_errors": recording_errors,
-            
-            # Legacy fields (can be deprecated later)
+            # Recording status
             "is_recording": is_recording,
             "is_streaming": is_streaming,
+            "recording_errors": recording_errors,
+            
+            # Storage information
             "storage_used": storage_used or get_storage_used(),
-            "ip_address": get_ip(),
-            "pi_active": True
+            "last_backup": last_backup,
+            
+            # System metrics
+            **metrics,
+            
+            # Additional custom data
+            **kwargs
         }
-
-        # 2. Filter out None values (e.g., temperature on non-Pi systems)
+        
+        # Remove None values to avoid database issues
         system_data = {k: v for k, v in system_data.items() if v is not None}
         
-        # 3. Upsert data to Supabase
-        # The 'upsert' operation will create a new record if one with the
-        # specified user_id doesn't exist, or update it if it does.
-        # This is more efficient than separate update/insert calls.
-        supabase.table("system_status").upsert(system_data, on_conflict="user_id").execute()
+        # Upsert to Supabase with retry logic
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                response = supabase.table("system_status").upsert(
+                    system_data, 
+                    on_conflict="user_id"
+                ).execute()
+                
+                if response.data:
+                    logger.debug("System status updated successfully")
+                    return True
+                else:
+                    logger.warning(f"System status update returned no data (attempt {attempt + 1})")
+                    
+            except Exception as e:
+                logger.warning(f"System status update attempt {attempt + 1} failed: {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(2 ** attempt)  # Exponential backoff
+                else:
+                    raise
         
-        logger.info("System status metrics successfully sent to Supabase.")
-        return True
+        return False
         
     except Exception as e:
-        logger.error(f"Error collecting and sending system status: {e}", exc_info=True)
+        logger.error(f"Error updating system status: {e}", exc_info=True)
         return False
 
 def save_booking(booking: Dict[str, Any]) -> bool:
-    """Save booking information to a JSON file."""
+    """Save booking information to local JSON file with validation."""
     try:
-        logger.info(f"Saving booking: {booking}")
-        os.makedirs(TEMP_DIR, exist_ok=True)
-        filepath = os.path.join(TEMP_DIR, "current_booking.json")
+        # Validate booking data
+        required_fields = ['id', 'start_time', 'end_time']
+        for field in required_fields:
+            if field not in booking:
+                logger.error(f"Booking missing required field: {field}")
+                return False
         
+        # Ensure temp directory exists
+        os.makedirs(TEMP_DIR, exist_ok=True)
+        
+        # Save to file with timestamp
+        booking_data = {
+            **booking,
+            "saved_at": local_now().isoformat(),
+            "saved_by": "utils.save_booking"
+        }
+        
+        filepath = os.path.join(TEMP_DIR, "current_booking.json")
         with open(filepath, "w") as f:
-            json.dump(booking, f)
+            json.dump(booking_data, f, indent=2)
             
-        logger.info(f"Booking saved: {booking['id']}")
+        logger.info(f"Booking saved: {booking['id']} ({booking.get('start_time')} - {booking.get('end_time')})")
         return True
         
     except Exception as e:
         logger.error(f"Error saving booking: {e}", exc_info=True)
         return False
 
-def get_next_booking() -> Optional[Dict[str, Any]]:
-    """Get the next upcoming booking from Supabase."""
-    try:
-        now = local_now()
-        
-        # Query for upcoming bookings
-        response = supabase.table("bookings").select("*").gte(
-            "start_time", now.isoformat()
-        ).order("start_time").limit(1).execute()
-        
-        if response.data and len(response.data) > 0:
-            booking = response.data[0]
-            logger.info(f"Found next booking: {booking['id']} at {booking['start_time']}")
-            return booking
-        else:
-            logger.info("No upcoming bookings found")
-            return None
-            
-    except Exception as e:
-        logger.error(f"Error getting next booking: {e}", exc_info=True)
-        return None
-
 def load_booking() -> Optional[Dict[str, Any]]:
-    """Load booking information from JSON file."""
+    """Load current booking from local JSON file with validation."""
     try:
         filepath = os.path.join(TEMP_DIR, "current_booking.json")
         
         if not os.path.exists(filepath):
-            logger.info("No booking file found to load.")
+            logger.debug("No current booking file found")
             return None
             
         with open(filepath, "r") as f:
             booking = json.load(f)
+        
+        # Validate booking data
+        if not booking.get('id'):
+            logger.warning("Invalid booking data: missing ID")
+            return None
             
-        logger.info(f"Loaded booking: {booking}")
+        # Check if booking is still valid (not expired)
+        if 'end_time' in booking:
+            try:
+                end_time = datetime.fromisoformat(booking['end_time'])
+                if local_now() > end_time:
+                    logger.info(f"Booking {booking['id']} has expired, removing")
+                    remove_booking()
+                    return None
+            except ValueError:
+                logger.warning(f"Invalid end_time format in booking: {booking.get('end_time')}")
+        
+        logger.debug(f"Loaded booking: {booking['id']}")
         return booking
         
+    except json.JSONDecodeError as e:
+        logger.error(f"Invalid JSON in booking file: {e}")
+        return None
     except Exception as e:
         logger.error(f"Error loading booking: {e}", exc_info=True)
         return None
 
+def get_next_booking() -> Optional[Dict[str, Any]]:
+    """Get the next upcoming booking from Supabase with enhanced error handling."""
+    if not supabase:
+        logger.warning("Supabase client not available")
+        return None
+    
+    try:
+        now = local_now()
+        
+        # Query for next booking
+        response = supabase.table("bookings")\
+            .select("*")\
+            .eq("camera_id", CAMERA_ID)\
+            .eq("status", "confirmed")\
+            .gte("start_time", now.isoformat())\
+            .order("start_time")\
+            .limit(1)\
+            .execute()
+        
+        if response.data and len(response.data) > 0:
+            booking = response.data[0]
+            logger.info(f"Found next booking: {booking['id']} at {booking.get('start_time')}")
+            return booking
+        else:
+            logger.debug("No upcoming bookings found")
+            return None
+            
+    except Exception as e:
+        logger.error(f"Error fetching next booking: {e}", exc_info=True)
+        return None
+
 def remove_booking() -> bool:
-    """Remove the current booking file."""
+    """Remove current booking file."""
     try:
         filepath = os.path.join(TEMP_DIR, "current_booking.json")
-        
         if os.path.exists(filepath):
             os.remove(filepath)
-            logger.info("Booking file removed")
-            
-        else:
-            logger.info("No booking file to remove.")
-            
+            logger.info("Current booking removed")
         return True
-        
     except Exception as e:
-        logger.error(f"Error removing booking: {e}", exc_info=True)
+        logger.error(f"Error removing booking: {e}")
         return False
 
-def queue_upload(filepath: str) -> bool:
-    """Add a file to the upload queue."""
+def get_storage_used() -> int:
+    """Calculate storage used by recordings and temp files."""
     try:
-        logger.info(f"Queueing file for upload: {filepath}")
-        queue_file = os.path.join(TEMP_DIR, "upload_queue.json")
-        queue = get_upload_queue()
+        total_size = 0
         
-        if filepath not in queue:
-            queue.append(filepath)
-            
-            with open(queue_file, "w") as f:
-                json.dump(queue, f)
-                
-            logger.info(f"File queued for upload: {filepath}")
-            
-        else:
-            logger.info(f"File already in upload queue: {filepath}")
-            
+        # Check recordings directory
+        if os.path.exists(RECORDING_DIR):
+            for root, dirs, files in os.walk(RECORDING_DIR):
+                for file in files:
+                    filepath = os.path.join(root, file)
+                    try:
+                        total_size += os.path.getsize(filepath)
+                    except OSError:
+                        pass
+        
+        # Check temp directory
+        if os.path.exists(TEMP_DIR):
+            for root, dirs, files in os.walk(TEMP_DIR):
+                for file in files:
+                    if file.endswith(('.mp4', '.avi', '.mov', '.h264')):
+                        filepath = os.path.join(root, file)
+                        try:
+                            total_size += os.path.getsize(filepath)
+                        except OSError:
+                            pass
+        
+        return total_size
+        
+    except Exception as e:
+        logger.error(f"Error calculating storage usage: {e}")
+        return 0
+
+def cleanup_temp_files(max_age_hours: int = 24) -> int:
+    """Clean up old temporary files and return number of files cleaned."""
+    try:
+        cleaned_count = 0
+        cutoff_time = time.time() - (max_age_hours * 3600)
+        
+        if not os.path.exists(TEMP_DIR):
+            return 0
+        
+        for root, dirs, files in os.walk(TEMP_DIR):
+            for file in files:
+                filepath = os.path.join(root, file)
+                try:
+                    if os.path.getmtime(filepath) < cutoff_time:
+                        os.remove(filepath)
+                        cleaned_count += 1
+                        logger.debug(f"Cleaned up old file: {file}")
+                except OSError as e:
+                    logger.warning(f"Could not remove {file}: {e}")
+        
+        if cleaned_count > 0:
+            logger.info(f"Cleaned up {cleaned_count} old temporary files")
+        
+        return cleaned_count
+        
+    except Exception as e:
+        logger.error(f"Error during cleanup: {e}")
+        return 0
+
+def format_timestamp(timestamp: datetime) -> str:
+    """Format timestamp for display."""
+    return timestamp.strftime('%Y-%m-%d %H:%M:%S')
+
+def validate_camera_access() -> bool:
+    """Validate that camera is accessible."""
+    try:
+        # Quick OpenCV test
+        cap = cv2.VideoCapture(0)
+        if cap.isOpened():
+            ret, frame = cap.read()
+            cap.release()
+            return ret and frame is not None
+        return False
+    except Exception:
+        return False
+
+def get_system_info() -> Dict[str, Any]:
+    """Get comprehensive system information for debugging."""
+    try:
+        import platform
+        
+        info = {
+            "platform": platform.platform(),
+            "system": platform.system(),
+            "machine": platform.machine(),
+            "processor": platform.processor(),
+            "python_version": platform.python_version(),
+            "hostname": socket.gethostname(),
+            "ip_address": get_ip_address(),
+            "uptime_seconds": int(time.time() - psutil.boot_time()),
+            "boot_time": datetime.fromtimestamp(psutil.boot_time()).isoformat(),
+            "cpu_count": psutil.cpu_count(),
+            "memory_total": psutil.virtual_memory().total,
+            "disk_total": psutil.disk_usage("/").total,
+            "temperature": get_cpu_temperature(),
+        }
+        
+        return info
+        
+    except Exception as e:
+        logger.error(f"Error getting system info: {e}")
+        return {"error": str(e)}
+
+# Heartbeat functionality for monitoring
+_heartbeat_thread = None
+_heartbeat_stop = threading.Event()
+
+def start_heartbeat_thread(interval: int = 300):  # 5 minutes default
+    """Start heartbeat monitoring thread."""
+    global _heartbeat_thread
+    
+    if _heartbeat_thread and _heartbeat_thread.is_alive():
+        logger.warning("Heartbeat thread already running")
+        return
+    
+    def heartbeat_worker():
+        logger.info(f"Heartbeat thread started (interval: {interval}s)")
+        
+        while not _heartbeat_stop.wait(interval):
+            try:
+                # Update system status as heartbeat
+                update_system_status()
+                logger.debug("Heartbeat sent")
+            except Exception as e:
+                logger.error(f"Heartbeat error: {e}")
+    
+    _heartbeat_stop.clear()
+    _heartbeat_thread = threading.Thread(target=heartbeat_worker, daemon=True, name="Heartbeat")
+    _heartbeat_thread.start()
+    
+    logger.info("Heartbeat monitoring started")
+
+def stop_heartbeat_thread():
+    """Stop heartbeat monitoring thread."""
+    global _heartbeat_thread
+    
+    if _heartbeat_thread and _heartbeat_thread.is_alive():
+        _heartbeat_stop.set()
+        _heartbeat_thread.join(timeout=5)
+        logger.info("Heartbeat monitoring stopped")
+
+# Queue management functions for upload handling
+def queue_upload(filepath: str, metadata: Dict[str, Any] = None) -> bool:
+    """Queue a file for upload with metadata."""
+    try:
+        queue_file = os.path.join(TEMP_DIR, "upload_queue.json")
+        queue_data = []
+        
+        # Load existing queue
+        if os.path.exists(queue_file):
+            with open(queue_file, "r") as f:
+                queue_data = json.load(f)
+        
+        # Add new item
+        queue_item = {
+            "filepath": filepath,
+            "queued_at": local_now().isoformat(),
+            "metadata": metadata or {},
+            "attempts": 0,
+            "last_attempt": None,
+            "status": "queued"
+        }
+        
+        queue_data.append(queue_item)
+        
+        # Save queue
+        with open(queue_file, "w") as f:
+            json.dump(queue_data, f, indent=2)
+        
+        logger.info(f"File queued for upload: {filepath}")
         return True
         
     except Exception as e:
-        logger.error(f"Error queueing file for upload: {e}", exc_info=True)
+        logger.error(f"Error queueing upload: {e}")
         return False
 
-def get_upload_queue() -> List[str]:
-    """Get the list of files in the upload queue."""
+def get_upload_queue() -> List[Dict[str, Any]]:
+    """Get current upload queue."""
     try:
         queue_file = os.path.join(TEMP_DIR, "upload_queue.json")
         
         if not os.path.exists(queue_file):
-            logger.info("No upload queue file found.")
             return []
-            
-        with open(queue_file, "r") as f:
-            queue = json.load(f)
-            
-        logger.info(f"Loaded upload queue: {queue}")
-        return queue
         
+        with open(queue_file, "r") as f:
+            return json.load(f)
+            
     except Exception as e:
-        logger.error(f"Error getting upload queue: {e}", exc_info=True)
+        logger.error(f"Error reading upload queue: {e}")
         return []
 
 def clear_upload_queue() -> bool:
     """Clear the upload queue."""
     try:
         queue_file = os.path.join(TEMP_DIR, "upload_queue.json")
-        
         if os.path.exists(queue_file):
             os.remove(queue_file)
-            
         logger.info("Upload queue cleared")
         return True
-        
     except Exception as e:
-        logger.error(f"Error clearing upload queue: {e}", exc_info=True)
+        logger.error(f"Error clearing upload queue: {e}")
         return False
 
-def format_timestamp(timestamp: datetime) -> str:
-    """Format timestamp for Supabase."""
-    return timestamp.isoformat()
-
-def cleanup_temp_files(directory: str) -> None:
-    """Clean up temporary files in the specified directory."""
-    try:
-        for filename in os.listdir(directory):
-            filepath = os.path.join(directory, filename)
-            try:
-                if os.path.isfile(filepath):
-                    os.remove(filepath)
-                    logger.info(f"Removed temporary file: {filepath}")
-            except Exception as e:
-                logger.error(f"Error removing file {filepath}: {e}")
-                
-    except Exception as e:
-        logger.error(f"Error cleaning up temporary files: {e}")
-
-def get_storage_used() -> int:
-    """Get total storage used in the recordings directory."""
-    try:
-        total_size = sum(
-            os.path.getsize(os.path.join(dirpath, filename))
-            for dirpath, _, filenames in os.walk(RECORDING_DIR)
-            for filename in filenames
-        )
-        return total_size
-    except Exception as e:
-        logger.error(f"Failed to calculate storage used: {e}")
-        return 0
-
-# --- Video Processing Functions ---
-
-def overlay_logo(frame, logo_path: str, position: str, cache: Dict) -> any:
-    """
-    Overlays a logo on a video frame.
-    Caches the resized logo to avoid reprocessing.
-    """
-    if not os.path.exists(logo_path):
-        logger.warning(f"Logo file not found at {logo_path}")
-        return frame
-
-    if position not in cache:
-        logo = cv2.imread(logo_path, cv2.IMREAD_UNCHANGED)
-        if logo is None:
-            logger.error(f"Failed to read logo file: {logo_path}")
-            return frame
-
-        h_frame, w_frame = frame.shape[:2]
-        # Resize logo to be 15% of frame width, with a max of 180px
-        fixed_logo_width = min(int(w_frame * 0.15), 180)
-        scale_factor = fixed_logo_width / logo.shape[1]
-        
-        # Check if logo needs resizing
-        if abs(scale_factor - 1.0) > 0.01:
-            logo = cv2.resize(logo, (0, 0), fx=scale_factor, fy=scale_factor, interpolation=cv2.INTER_AREA)
-        
-        cache[position] = logo
-    else:
-        logo = cache[position]
-
-    h_logo, w_logo = logo.shape[:2]
-    h_frame, w_frame = frame.shape[:2]
-    
-    # Position mapping
-    x_margin, y_margin = 20, 20
-    positions = {
-        "top-left": (x_margin, y_margin),
-        "top-right": (w_frame - w_logo - x_margin, y_margin),
-        "bottom-left": (x_margin, h_frame - h_logo - y_margin),
-        "bottom-right": (w_frame - w_logo - x_margin, h_frame - h_logo - y_margin),
-    }
-    x, y = positions.get(position, positions["top-right"])
-
-    # Ensure the logo fits within the frame
-    if x < 0 or y < 0 or x + w_logo > w_frame or y + h_logo > h_frame:
-        logger.warning("Logo position is out of frame boundaries.")
-        return frame
-
-    # Overlay with alpha blending
-    if logo.shape[2] == 4:  # Check for alpha channel
-        alpha = logo[:, :, 3] / 255.0
-        for c in range(3):
-            frame[y:y+h_logo, x:x+w_logo, c] = (
-                alpha * logo[:, :, c] + (1 - alpha) * frame[y:y+h_logo, x:x+w_logo, c]
-            )
-    else:  # No alpha channel
-        frame[y:y+h_logo, x:x+w_logo] = logo
-
-    return frame
-
-def add_timestamp(frame, timestamp_str: str) -> any:
-    """Adds a timestamp overlay to a video frame with a background."""
-    h_frame, w_frame = frame.shape[:2]
-    
-    font = cv2.FONT_HERSHEY_SIMPLEX
-    font_scale = max(0.6, min(1.5, w_frame / 1200)) # Scale font with width
-    thickness = max(1, int(font_scale * 1.5))
-    
-    (text_width, text_height), baseline = cv2.getTextSize(timestamp_str, font, font_scale, thickness)
-    
-    padding = 10
-    x = padding
-    y = text_height + padding
-    
-    # Add semi-transparent background
-    overlay = frame.copy()
-    cv2.rectangle(overlay, 
-                  (x, y - text_height - baseline), 
-                  (x + text_width + (padding * 2), y + baseline), 
-                  (0, 0, 0), -1)
-    
-    # Blend the background
-    alpha = 0.6
-    cv2.addWeighted(overlay, alpha, frame, 1 - alpha, 0, frame)
-    
-    # Add timestamp text
-    cv2.putText(frame, timestamp_str, (x + padding, y), font, font_scale, (255, 255, 255), thickness, cv2.LINE_AA)
-    
-    return frame
-
-HEARTBEAT_INTERVAL = 5  # seconds - reduced from 20 to 5 for faster frontend updates
-
-_heartbeat_thread = None
-_heartbeat_stop_event = threading.Event()
-
-def send_heartbeat(is_recording=False, is_streaming=False, storage_used=None, last_backup=None):
-    """Send a heartbeat update to keep the system marked as active"""
-    try:
-        now = datetime.utcnow()
-        
-        # Prepare update data
-        data = {
-            "pi_active": True,
-            "last_heartbeat": now.isoformat(),
-            "last_seen": now.isoformat(),
-            "is_recording": is_recording,
-            "is_streaming": is_streaming,
-        }
-        
-        if storage_used is not None:
-            data["storage_used"] = storage_used
-        if last_backup is not None:
-            data["last_backup"] = last_backup
-            
-        # Try to update existing record first
-        try:
-            result = supabase.table("system_status").update(data).eq("user_id", USER_ID).execute()
-            if not result.data:
-                # No existing record found, insert new one with user_id
-                data["user_id"] = USER_ID
-                supabase.table("system_status").insert(data).execute()
-            print("[Heartbeat] Sent successfully")
-        except Exception as e:
-            # If update fails, try insert with user_id
-            try:
-                data["user_id"] = USER_ID
-                supabase.table("system_status").insert(data).execute()
-                print("[Heartbeat] Sent successfully (inserted)")
-            except Exception as insert_error:
-                print(f"[Heartbeat] Failed to send: {insert_error}")
-                logger.error(f"Heartbeat failed: {insert_error}", exc_info=True)
-        
-    except Exception as e:
-        print(f"[Heartbeat] Failed to send: {e}")
-        logger.error(f"Heartbeat failed: {e}", exc_info=True)
+# Legacy compatibility functions
+def send_heartbeat(*args, **kwargs):
+    """Legacy heartbeat function for backward compatibility."""
+    return update_system_status(*args, **kwargs)
 
 def _heartbeat_loop():
-    while not _heartbeat_stop_event.is_set():
-        send_heartbeat()
-        _heartbeat_stop_event.wait(HEARTBEAT_INTERVAL)
+    """Legacy heartbeat loop for backward compatibility."""
+    start_heartbeat_thread()
 
-def start_heartbeat_thread():
-    global _heartbeat_thread
-    if _heartbeat_thread is None or not _heartbeat_thread.is_alive():
-        _heartbeat_stop_event.clear()
-        _heartbeat_thread = threading.Thread(target=_heartbeat_loop, daemon=True)
-        _heartbeat_thread.start()
-
-def stop_heartbeat_thread():
-    """Stop the heartbeat background thread."""
-    if _heartbeat_thread and _heartbeat_thread.is_alive():
-        _heartbeat_stop_event.set()
-        _heartbeat_thread.join()
-        logger.info("Heartbeat thread stopped") 
+# Initialize heartbeat on import if not in debug mode
+if not DEBUG:
+    start_heartbeat_thread() 

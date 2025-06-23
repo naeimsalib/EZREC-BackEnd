@@ -1,0 +1,51 @@
+[Unit]
+Description=EZREC Backend Orchestrator Service
+Documentation=https://github.com/yourusername/EZREC-BackEnd
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User=ezrec
+Group=ezrec
+WorkingDirectory=/opt/ezrec-backend
+ExecStart=/opt/ezrec-backend/venv/bin/python /opt/ezrec-backend/src/orchestrator.py
+ExecReload=/bin/kill -USR1 $MAINPID
+
+# Environment
+Environment=PYTHONPATH=/opt/ezrec-backend/src
+EnvironmentFile=-/opt/ezrec-backend/.env
+
+# Security settings
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/ezrec-backend
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+# Resource limits
+LimitNOFILE=65536
+MemoryMax=1G
+CPUQuota=80%
+
+# Restart policy
+Restart=always
+RestartSec=10
+TimeoutStartSec=60
+TimeoutStopSec=30
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ezrec-backend
+
+# Additional video group access for camera
+SupplementaryGroups=video
+
+[Install]
+WantedBy=multi-user.target 

@@ -1,16 +1,8 @@
 #!/bin/bash
-
-# EZREC Backend - Raspberry Pi Setup Script
-# THIS IS THE ONLY SUPPORTED INSTALL/UPDATE SCRIPT FOR RASPBERRY PI
-# This script installs and configures the EZREC backend on a Raspberry Pi
-
 set -e
 
-# Remove legacy/unsupported scripts if present
-if [ -f "complete_update.sh" ]; then
-    echo -e "\033[1;33m[!] Removing deprecated complete_update.sh (use only this script for Pi)\033[0m"
-    rm -f complete_update.sh
-fi
+# EZREC Backend - Raspberry Pi Setup Script
+# Optimized installation and configuration for Raspberry Pi
 
 # Colors for output
 RED='\033[0;31m'
@@ -19,377 +11,364 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Print functions
-print_status() {
-    echo -e "${GREEN}[+]${NC} $1"
+# Configuration
+SERVICE_USER="ezrec"
+INSTALL_DIR="/opt/ezrec-backend"
+SERVICE_NAME="ezrec-backend"
+PYTHON_VERSION="python3"
+
+# Logging function
+log() {
+    echo -e "${BLUE}[$(date +'%Y-%m-%d %H:%M:%S')]${NC} $1"
 }
 
-print_warning() {
-    echo -e "${YELLOW}[!]${NC} $1"
+error() {
+    echo -e "${RED}[ERROR]${NC} $1" >&2
 }
 
-print_error() {
-    echo -e "${RED}[-]${NC} $1"
+warning() {
+    echo -e "${YELLOW}[WARNING]${NC} $1"
 }
 
-print_info() {
-    echo -e "${BLUE}[i]${NC} $1"
+success() {
+    echo -e "${GREEN}[SUCCESS]${NC} $1"
 }
 
 # Check if running as root
-if [ "$EUID" -ne 0 ]; then
-    print_error "Please run as root (use sudo)"
-    exit 1
-fi
+check_root() {
+    if [[ $EUID -ne 0 ]]; then
+        error "This script must be run as root (use sudo)"
+        exit 1
+    fi
+}
 
-# Configuration
-APP_NAME="EZREC-Backend"
-APP_DIR="/home/michomanoly14892/code/SmartCam-Soccer/backend"
-SERVICE_USER="michomanoly14892"
-SERVICE_GROUP="michomanoly14892"
+# Check if running on Raspberry Pi OS
+check_platform() {
+    if [[ ! -f /etc/rpi-issue ]]; then
+        warning "This script is optimized for Raspberry Pi OS"
+        warning "Continuing anyway, but some features may not work correctly"
+    fi
+}
 
-print_status "Starting EZREC Backend installation on Raspberry Pi..."
-print_info "Using directory: $APP_DIR"
-
-# Update system
-print_status "Updating system packages..."
-apt-get update
-apt-get upgrade -y
+# Update system packages
+update_system() {
+    log "Updating system packages..."
+    apt update
+    apt upgrade -y
+    success "System packages updated"
+}
 
 # Install system dependencies
-print_status "Installing system dependencies..."
-apt-get install -y \
-    python3 \
-    python3-pip \
-    python3-venv \
-    python3-opencv \
-    ffmpeg \
-    v4l-utils \
-    libopencv-dev \
-    libatlas-base-dev \
-    libhdf5-dev \
-    libhdf5-serial-dev \
-    libopenjp2-7 \
-    libtiff-dev \
-    libavcodec-dev \
-    libavformat-dev \
-    libswscale-dev \
-    libv4l-dev \
-    libxvidcore-dev \
-    libx264-dev \
-    libjpeg-dev \
-    libpng-dev \
-    gfortran \
-    libopenblas-dev \
-    liblapack-dev \
-    libimath-dev \
-    libopenexr-dev \
-    libgstreamer1.0-dev \
-    libgstreamer-plugins-base1.0-dev \
-    git \
-    curl \
-    wget
-
-# Create service user (use existing user)
-print_status "Setting up service user..."
-if ! id "$SERVICE_USER" &>/dev/null; then
-    print_error "User $SERVICE_USER does not exist. Please create the user first or update the script."
-    exit 1
-else
-    print_info "Using existing user: $SERVICE_USER"
-    # Ensure user is in video group for camera access
-    usermod -a -G video "$SERVICE_USER" 2>/dev/null || true
-fi
-
-# Ensure application directory exists and has correct permissions
-print_status "Setting up application directory..."
-if [ ! -d "$APP_DIR" ]; then
-    print_error "Directory $APP_DIR does not exist. Please clone the repository first."
-    exit 1
-fi
-
-# Set ownership to the user
-chown -R "$SERVICE_USER:$SERVICE_GROUP" "$APP_DIR"
-
-# Create necessary directories
-print_status "Creating necessary directories..."
-mkdir -p "$APP_DIR/recordings"
-mkdir -p "$APP_DIR/logs"
-mkdir -p "$APP_DIR/temp"
-mkdir -p "$APP_DIR/uploads"
-mkdir -p "$APP_DIR/user_assets"
-chown -R "$SERVICE_USER:$SERVICE_GROUP" "$APP_DIR"
-
-# Setup Python environment
-print_status "Setting up Python virtual environment..."
-cd "$APP_DIR"
-
-# Remove existing venv if it exists and recreate
-if [ -d "venv" ]; then
-    print_info "Removing existing virtual environment..."
-    rm -rf venv
-fi
-
-# Create virtual environment as the user
-sudo -u "$SERVICE_USER" python3 -m venv venv
-chown -R "$SERVICE_USER:$SERVICE_GROUP" venv
-
-# Install dependencies as the service user
-print_status "Installing Python dependencies..."
-sudo -u "$SERVICE_USER" "$APP_DIR/venv/bin/pip" install --upgrade pip
-sudo -u "$SERVICE_USER" "$APP_DIR/venv/bin/pip" install -r requirements.txt
-
-# Create .env file if it doesn't exist
-if [ ! -f "$APP_DIR/.env" ]; then
-    print_status "Creating .env file..."
-    cat > "$APP_DIR/.env" << EOL
-# Supabase Configuration
-SUPABASE_URL=your_supabase_url_here
-SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key_here
-SUPABASE_ANON_KEY=your_supabase_anon_key_here
-
-# User Configuration
-USER_ID=your_user_id_here
-USER_EMAIL=your_email_here
-
-# Camera Configuration
-CAMERA_ID=raspberry_pi_camera
-CAMERA_NAME=Raspberry Pi Camera
-CAMERA_LOCATION=Your Location
-CAMERA_DEVICE=/dev/video0
-CAMERA_WIDTH=1920
-CAMERA_HEIGHT=1080
-CAMERA_FPS=30
-
-# Recording Configuration
-RECORDING_DIR=$APP_DIR/recordings
-LOG_DIR=$APP_DIR/logs
-TEMP_DIR=$APP_DIR/temp
-UPLOAD_DIR=$APP_DIR/uploads
-
-# System Configuration
-DEBUG=false
-LOG_LEVEL=INFO
-EOL
-    chown "$SERVICE_USER:$SERVICE_GROUP" "$APP_DIR/.env"
-    print_warning "Please edit $APP_DIR/.env with your actual configuration"
-fi
-
-# Fix git ownership issues
-print_status "Fixing git ownership..."
-cd "$APP_DIR"
-if [ -d ".git" ]; then
-    git config --global --add safe.directory "$APP_DIR"
-    chown -R "$SERVICE_USER:$SERVICE_GROUP" .git
-    print_info "✓ Git ownership fixed"
-else
-    print_warning "No .git directory found (not a git repository)"
-fi
-
-# Create systemd service files
-print_status "Creating systemd services..."
-
-# Main service
-cat > /etc/systemd/system/ezrec.service << EOL
-[Unit]
-Description=EZREC Backend Service
-After=network.target
-
-[Service]
-Type=simple
-User=$SERVICE_USER
-Group=$SERVICE_GROUP
-WorkingDirectory=$APP_DIR
-Environment=PYTHONUNBUFFERED=1
-EnvironmentFile=$APP_DIR/.env
-ExecStart=$APP_DIR/venv/bin/python src/orchestrator.py
-Restart=always
-RestartSec=10
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=ezrec
-
-[Install]
-WantedBy=multi-user.target
-EOL
-
-# Reload systemd
-systemctl daemon-reload
-
-# Enable services
-print_status "Enabling services..."
-systemctl enable ezrec.service
-
-# Set permissions
-print_status "Setting final permissions..."
-chown -R "$SERVICE_USER:$SERVICE_GROUP" "$APP_DIR"
-chmod -R 755 "$APP_DIR"
-chmod -R 777 "$APP_DIR/temp" "$APP_DIR/recordings" "$APP_DIR/logs" "$APP_DIR/uploads"
-
-# Create logrotate configuration
-print_status "Setting up log rotation..."
-cat > /etc/logrotate.d/ezrec-backend << EOL
-$APP_DIR/logs/*.log {
-    daily
-    missingok
-    rotate 7
-    compress
-    delaycompress
-    notifempty
-    create 644 $SERVICE_USER $SERVICE_GROUP
-    postrotate
-        systemctl reload ezrec.service
-    endscript
+install_system_deps() {
+    log "Installing system dependencies..."
+    
+    # Core system packages
+    apt install -y \
+        python3 \
+        python3-pip \
+        python3-venv \
+        python3-dev \
+        git \
+        curl \
+        wget \
+        unzip \
+        build-essential \
+        pkg-config
+    
+    # Camera and media packages
+    apt install -y \
+        python3-opencv \
+        python3-libcamera \
+        python3-picamera2 \
+        libcamera-apps \
+        ffmpeg \
+        v4l-utils \
+        libopencv-dev \
+        libatlas-base-dev
+    
+    # Additional Pi-specific packages
+    apt install -y \
+        libraspberrypi-bin \
+        raspi-config
+    
+    success "System dependencies installed"
 }
-EOL
 
-# Create health check script
-print_status "Creating health check script..."
-cat > "$APP_DIR/health_check.sh" << 'EOL'
+# Create service user
+create_service_user() {
+    log "Creating service user: $SERVICE_USER"
+    
+    if id "$SERVICE_USER" &>/dev/null; then
+        log "User $SERVICE_USER already exists"
+    else
+        useradd -r -s /bin/bash -d "$INSTALL_DIR" -m "$SERVICE_USER"
+        # Add user to video group for camera access
+        usermod -a -G video "$SERVICE_USER"
+        success "Service user $SERVICE_USER created"
+    fi
+}
+
+# Setup application directories
+setup_directories() {
+    log "Setting up application directories..."
+    
+    # Create main directory
+    mkdir -p "$INSTALL_DIR"
+    
+    # Create subdirectories
+    mkdir -p "$INSTALL_DIR"/{src,logs,temp,recordings,uploads,user_assets}
+    
+    # Copy application files
+    if [[ -d "src" ]]; then
+        cp -r src/* "$INSTALL_DIR/src/"
+        log "Application source files copied"
+    else
+        error "Source directory not found. Make sure you're running this from the project root."
+        exit 1
+    fi
+    
+    # Copy configuration files
+    cp requirements.txt "$INSTALL_DIR/"
+    if [[ -f ".env.example" ]]; then
+        cp .env.example "$INSTALL_DIR/"
+    fi
+    
+    # Set ownership
+    chown -R "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR"
+    
+    # Set permissions
+    chmod -R 755 "$INSTALL_DIR"
+    chmod -R 775 "$INSTALL_DIR"/{logs,temp,recordings,uploads}
+    
+    success "Application directories configured"
+}
+
+# Setup Python virtual environment
+setup_python_env() {
+    log "Setting up Python virtual environment..."
+    
+    cd "$INSTALL_DIR"
+    
+    # Create virtual environment as service user
+    sudo -u "$SERVICE_USER" $PYTHON_VERSION -m venv venv
+    
+    # Upgrade pip
+    sudo -u "$SERVICE_USER" "$INSTALL_DIR/venv/bin/pip" install --upgrade pip setuptools wheel
+    
+    # Install Python dependencies
+    sudo -u "$SERVICE_USER" "$INSTALL_DIR/venv/bin/pip" install -r requirements.txt
+    
+    success "Python environment configured"
+}
+
+# Configure environment file
+configure_environment() {
+    log "Configuring environment file..."
+    
+    if [[ ! -f "$INSTALL_DIR/.env" ]]; then
+        if [[ -f "$INSTALL_DIR/.env.example" ]]; then
+            cp "$INSTALL_DIR/.env.example" "$INSTALL_DIR/.env"
+            chown "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR/.env"
+            chmod 600 "$INSTALL_DIR/.env"
+            
+            warning "Environment file created from example. Please edit $INSTALL_DIR/.env with your configuration."
+        else
+            error "No .env.example file found"
+        fi
+    else
+        log "Environment file already exists"
+    fi
+}
+
+# Install systemd service
+install_systemd_service() {
+    log "Installing systemd service..."
+    
+    # Copy service file
+    if [[ -f "ezrec-backend.service" ]]; then
+        cp ezrec-backend.service /etc/systemd/system/
+        
+        # Reload systemd
+        systemctl daemon-reload
+        
+        # Enable service
+        systemctl enable "$SERVICE_NAME"
+        
+        success "Systemd service installed and enabled"
+    else
+        error "Service file ezrec-backend.service not found"
+        exit 1
+    fi
+}
+
+# Create management script
+create_management_script() {
+    log "Creating management script..."
+    
+    cat > "$INSTALL_DIR/manage.sh" << 'EOF'
 #!/bin/bash
-# Health check script for EZREC Backend
 
-APP_DIR="/home/michomanoly14892/code/SmartCam-Soccer/backend"
-SERVICE_USER="michomanoly14892"
-
-# Check if services are running
-check_service() {
-    local service_name=$1
-    if systemctl is-active --quiet "$service_name"; then
-        echo "✓ $service_name is running"
-        return 0
-    else
-        echo "✗ $service_name is not running"
-        return 1
-    fi
-}
-
-# Check disk space
-check_disk_space() {
-    local usage=$(df "$APP_DIR" | tail -1 | awk '{print $5}' | sed 's/%//')
-    if [ "$usage" -lt 90 ]; then
-        echo "✓ Disk space OK: ${usage}% used"
-        return 0
-    else
-        echo "✗ Disk space critical: ${usage}% used"
-        return 1
-    fi
-}
-
-# Check camera
-check_camera() {
-    if v4l2-ctl --list-devices | grep -q "video"; then
-        echo "✓ Camera detected"
-        return 0
-    else
-        echo "✗ No camera detected"
-        return 1
-    fi
-}
-
-# Main health check
-echo "EZREC Backend Health Check"
-echo "========================="
-
-check_service "ezrec.service"
-check_disk_space
-check_camera
-
-echo ""
-echo "For detailed logs: journalctl -u ezrec.service -f"
-EOL
-
-chmod +x "$APP_DIR/health_check.sh"
-
-# Create the simplified management script
-print_status "Creating simplified management script..."
-cat > "$APP_DIR/manage.sh" << 'EOL'
-#!/bin/bash
 # EZREC Backend Management Script
 
-APP_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-
-# Ensure the script is run with sudo for service commands
-if [[ $EUID -ne 0 ]] && [[ "$1" == "start" || "$1" == "stop" || "$1" == "restart" ]]; then
-   echo "This command must be run with sudo." 
-   exit 1
-fi
+SERVICE_NAME="ezrec-backend"
+INSTALL_DIR="/opt/ezrec-backend"
 
 case "$1" in
     start)
-        echo "Starting EZREC Backend service..."
-        systemctl start ezrec.service
+        echo "Starting EZREC Backend..."
+        sudo systemctl start $SERVICE_NAME
         ;;
     stop)
-        echo "Stopping EZREC Backend service..."
-        systemctl stop ezrec.service
+        echo "Stopping EZREC Backend..."
+        sudo systemctl stop $SERVICE_NAME
         ;;
     restart)
-        echo "Restarting EZREC Backend service..."
-        systemctl restart ezrec.service
+        echo "Restarting EZREC Backend..."
+        sudo systemctl restart $SERVICE_NAME
         ;;
     status)
-        echo "EZREC Backend Service Status:"
-        systemctl status ezrec.service --no-pager
+        sudo systemctl status $SERVICE_NAME
         ;;
     logs)
-        echo "Showing live logs (Ctrl+C to exit)..."
-        journalctl -u ezrec.service -f -n 50 --no-pager
+        sudo journalctl -u $SERVICE_NAME -f
         ;;
     health)
-        echo "EZREC Backend Health Check"
-        echo "========================="
-        
-        # Check service
-        if systemctl is-active --quiet "ezrec.service"; then
-            echo "✓ EZREC Service is running"
-        else
-            echo "✗ EZREC Service is NOT running"
-        fi
-        
-        # Check disk space
-        usage=$(df -h "$APP_DIR" | tail -1 | awk '{print $5}')
-        echo "✓ Disk space usage: ${usage}"
-        
-        # Check camera
-        if v4l2-ctl --list-devices 2>/dev/null | grep -q "video"; then
-            echo "✓ Camera detected"
-        else
-            echo "✗ No camera detected"
-        fi
-        
+        echo "=== EZREC Backend Health Check ==="
+        echo "Service Status:"
+        sudo systemctl is-active $SERVICE_NAME
         echo ""
-        echo "For detailed logs: journalctl -u ezrec.service -f"
+        echo "Recent Logs:"
+        sudo journalctl -u $SERVICE_NAME --lines=10 --no-pager
+        echo ""
+        echo "Camera Detection:"
+        cd $INSTALL_DIR && sudo -u ezrec $INSTALL_DIR/venv/bin/python src/find_camera.py
         ;;
     update)
         echo "Updating EZREC Backend..."
-        cd "$APP_DIR"
+        cd $INSTALL_DIR
         git pull
-        echo "Updating Python dependencies..."
-        "$APP_DIR/venv/bin/pip" install -r "$APP_DIR/requirements.txt"
-        echo "Restarting service..."
-        sudo systemctl restart ezrec.service
-        echo "Update complete!"
+        sudo -u ezrec $INSTALL_DIR/venv/bin/pip install -r requirements.txt
+        sudo systemctl restart $SERVICE_NAME
+        echo "Update complete"
+        ;;
+    config)
+        echo "Opening configuration file..."
+        sudo nano $INSTALL_DIR/.env
         ;;
     *)
-        echo "Usage: $0 {start|stop|restart|status|logs|health|update}"
+        echo "Usage: $0 {start|stop|restart|status|logs|health|update|config}"
         exit 1
         ;;
 esac
-EOL
-chmod +x "$APP_DIR/manage.sh"
-chown "$SERVICE_USER:$SERVICE_GROUP" "$APP_DIR/manage.sh"
-print_info "✓ Created manage.sh"
-echo ""
+EOF
 
-print_status "Installation completed successfully!"
-echo ""
-print_info "Next steps:"
-echo "1. Edit the configuration file: sudo nano $APP_DIR/.env"
-echo "2. Start the services: sudo $APP_DIR/manage.sh start"
-echo "3. Check status: sudo $APP_DIR/manage.sh status"
-echo "4. View logs: sudo $APP_DIR/manage.sh logs"
-echo "5. Health check: sudo $APP_DIR/manage.sh health"
-echo ""
-print_warning "Make sure to configure your Supabase credentials in $APP_DIR/.env"
-print_warning "The services will start automatically on boot" 
+    chmod +x "$INSTALL_DIR/manage.sh"
+    chown "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR/manage.sh"
+    
+    # Create symlink for easier access
+    ln -sf "$INSTALL_DIR/manage.sh" /usr/local/bin/ezrec
+    
+    success "Management script created"
+}
+
+# Enable camera interface
+enable_camera() {
+    log "Checking camera interface..."
+    
+    if command -v raspi-config >/dev/null 2>&1; then
+        # Enable camera interface via raspi-config
+        raspi-config nonint do_camera 0
+        log "Camera interface enabled"
+    else
+        log "raspi-config not found, camera interface may need manual configuration"
+    fi
+    
+    # Check if camera is detected
+    if command -v libcamera-hello >/dev/null 2>&1; then
+        log "Testing camera detection..."
+        timeout 10 libcamera-hello --list-cameras || warning "Camera detection test failed"
+    fi
+}
+
+# Final system configuration
+final_configuration() {
+    log "Performing final configuration..."
+    
+    # Configure log rotation
+    cat > /etc/logrotate.d/ezrec-backend << EOF
+$INSTALL_DIR/logs/*.log {
+    daily
+    rotate 7
+    compress
+    missingok
+    notifempty
+    create 644 $SERVICE_USER $SERVICE_USER
+}
+EOF
+    
+    # Set up automatic log cleanup
+    (crontab -u "$SERVICE_USER" -l 2>/dev/null; echo "0 2 * * * find $INSTALL_DIR/temp -type f -mtime +7 -delete") | crontab -u "$SERVICE_USER" -
+    
+    success "Final configuration completed"
+}
+
+# Test installation
+test_installation() {
+    log "Testing installation..."
+    
+    # Test Python environment
+    if sudo -u "$SERVICE_USER" "$INSTALL_DIR/venv/bin/python" -c "import cv2, numpy; print('Python environment OK')"; then
+        success "Python environment test passed"
+    else
+        error "Python environment test failed"
+        return 1
+    fi
+    
+    # Test camera detection
+    if sudo -u "$SERVICE_USER" "$INSTALL_DIR/venv/bin/python" "$INSTALL_DIR/src/find_camera.py" >/dev/null 2>&1; then
+        success "Camera detection test passed"
+    else
+        warning "Camera detection test failed - check camera connection"
+    fi
+    
+    success "Installation tests completed"
+}
+
+# Main installation function
+main() {
+    log "Starting EZREC Backend installation..."
+    
+    check_root
+    check_platform
+    update_system
+    install_system_deps
+    create_service_user
+    setup_directories
+    setup_python_env
+    configure_environment
+    install_systemd_service
+    create_management_script
+    enable_camera
+    final_configuration
+    test_installation
+    
+    success "Installation completed successfully!"
+    
+    echo ""
+    log "Next steps:"
+    echo "1. Edit configuration: sudo nano $INSTALL_DIR/.env"
+    echo "2. Start the service: sudo systemctl start $SERVICE_NAME"
+    echo "3. Check status: sudo systemctl status $SERVICE_NAME"
+    echo "4. View logs: sudo journalctl -u $SERVICE_NAME -f"
+    echo ""
+    echo "Management commands:"
+    echo "  ezrec start|stop|restart|status|logs|health|update|config"
+    echo ""
+    
+    if [[ ! -f "$INSTALL_DIR/.env" ]] || grep -q "your_" "$INSTALL_DIR/.env"; then
+        warning "Don't forget to configure your environment variables in $INSTALL_DIR/.env"
+    fi
+}
+
+# Run main function
+main "$@" 
