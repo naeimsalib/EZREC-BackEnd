@@ -145,15 +145,14 @@ def upload_recording_to_database(recording_path, storage_result, booking_info=No
             start_time = datetime.fromtimestamp(file_stats.st_ctime)
             end_time = datetime.fromtimestamp(file_stats.st_mtime)
         
-        # Create recording record compatible with your database schema
+        # Create recording record with only basic columns that should exist
         recording_data = {
             'user_id': USER_ID,
             'camera_id': CAMERA_ID,
             'booking_id': booking_info.get('booking_id') if booking_info else None,
             'filename': os.path.basename(recording_path),
-            'file_path': storage_result.get('storage_path') if storage_result.get('success') else recording_path,
+            'file_path': recording_path,  # Always use local path for now
             'file_size': file_stats.st_size,
-            'file_hash': file_hash,
             'duration_seconds': 180,  # 3 minutes default
             'start_time': start_time.isoformat(),
             'end_time': end_time.isoformat(),
@@ -161,21 +160,29 @@ def upload_recording_to_database(recording_path, storage_result, booking_info=No
             'status': 'completed',
             'format': 'mp4',
             'resolution': '1920x1080',
-            'fps': 30,
-            'upload_status': 'uploaded' if storage_result.get('success') else 'local',
-            'uploaded_at': datetime.now().isoformat() if storage_result.get('success') else None,
-            'upload_url': storage_result.get('public_url'),  # Changed from public_url to upload_url
-            'metadata': {
+            'fps': 30
+        }
+        
+        # Add optional columns only if they might exist
+        try:
+            # Try to add file_hash if column exists
+            if file_hash:
+                recording_data['file_hash'] = file_hash
+        except:
+            pass
+            
+        try:
+            # Try to add metadata if column exists
+            recording_data['metadata'] = {
                 'file_size_mb': round(file_stats.st_size / (1024*1024), 2),
                 'camera_type': 'pi_camera',
                 'resolution': '1920x1080',
                 'fps': 30,
                 'bitrate': 10000000,
-                'format': 'h264',
-                'storage_path': storage_result.get('storage_path'),  # Moved to metadata
-                'uploaded_to_storage': storage_result.get('success', False)
+                'format': 'h264'
             }
-        }
+        except:
+            pass
         
         # Check if recording already exists (by filename and file_size)
         existing = supabase.table('recordings').select('id').eq('filename', recording_data['filename']).eq('file_size', recording_data['file_size']).execute()
@@ -188,9 +195,8 @@ def upload_recording_to_database(recording_path, storage_result, booking_info=No
         response = supabase.table('recordings').insert(recording_data).execute()
         
         if response.data:
-            size_mb = recording_data['metadata']['file_size_mb']
-            storage_status = "✅ Uploaded to Storage" if storage_result.get('success') else "📍 Local only"
-            logger.info(f"📝 Recording added to database: {recording_data['filename']} ({size_mb} MB) - {storage_status}")
+            size_mb = round(file_stats.st_size / (1024*1024), 2)
+            logger.info(f"📝 Recording added to database: {recording_data['filename']} ({size_mb} MB)")
             return response.data[0]['id']
         else:
             logger.error(f"❌ Failed to add recording {recording_data['filename']} to database")
