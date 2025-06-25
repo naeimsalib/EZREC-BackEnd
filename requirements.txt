@@ -1,5 +1,5 @@
-# EZREC Backend Dependencies (Optimized for Raspberry Pi)
-# Last updated: 2024
+# EZREC Backend Dependencies (Raspberry Pi Optimized)
+# Production-ready with Picamera2 and system integration
 
 # Core Dependencies
 python-dotenv==1.0.0
@@ -26,9 +26,21 @@ numpy==1.26.4
 pathlib2==2.3.7
 typing-extensions==4.8.0
 
-# Note: System packages required on Raspberry Pi:
-# - python3-libcamera
-# - python3-picamera2  
-# - ffmpeg
-# - v4l-utils
-# Install with: sudo apt install python3-libcamera python3-picamera2 ffmpeg v4l-utils
+# Async support
+asyncio-mqtt==0.16.1
+
+# CRITICAL: Raspberry Pi System Packages Required
+# Install these BEFORE running pip install:
+# sudo apt update
+# sudo apt install -y python3-libcamera python3-picamera2 python3-opencv
+# sudo apt install -y ffmpeg v4l-utils python3-dev
+# sudo apt install -y libcamera-apps libcamera-tools
+
+# For exclusive camera access:
+# sudo systemctl disable motion
+# sudo systemctl disable mjpg-streamer
+# sudo systemctl stop motion
+# sudo systemctl stop mjpg-streamer
+
+# Note: Picamera2 is installed via system packages, not pip
+# This ensures proper integration with Raspberry Pi camera hardware
