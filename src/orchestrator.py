@@ -153,8 +153,15 @@ class EZRECOrchestrator:
                     continue
 
                 now = datetime.now().astimezone()
-                start_time = datetime.fromisoformat(booking["start_time"])
-                end_time = datetime.fromisoformat(booking["end_time"])
+                
+                # Parse booking date and time (format: date="2025-06-25", start_time="00:30")
+                booking_date = booking["date"]
+                booking_start = booking["start_time"] 
+                booking_end = booking["end_time"]
+                
+                # Combine date and time to create full datetime objects
+                start_time = datetime.strptime(f"{booking_date} {booking_start}", "%Y-%m-%d %H:%M").replace(tzinfo=now.tzinfo)
+                end_time = datetime.strptime(f"{booking_date} {booking_end}", "%Y-%m-%d %H:%M").replace(tzinfo=now.tzinfo)
 
                 # Check if we're within the booking window
                 if start_time <= now < end_time:
@@ -178,6 +185,14 @@ class EZRECOrchestrator:
                             self.current_booking_id = None
                         except Exception as e:
                             self._handle_error(f"Error stopping recording for booking {booking['id']}", e)
+                    
+                    # Remove the completed booking
+                    try:
+                        from utils import remove_booking
+                        remove_booking()
+                        self.logger.info(f"Removed completed booking {booking['id']}")
+                    except Exception as e:
+                        self.logger.warning(f"Failed to remove completed booking: {e}")
 
                 # Sleep for 1 second for precision, but check stop event
                 if self.stop_event.wait(1):

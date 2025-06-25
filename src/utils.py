@@ -248,8 +248,15 @@ def update_system_status(
                     
                     # Also update cameras table for dashboard
                     try:
+                        import uuid
+                        
+                        # Generate a consistent UUID for this camera
+                        camera_uuid = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{USER_ID}-camera-{CAMERA_ID}"))
+                        
                         camera_data = {
+                            "id": camera_uuid,
                             "user_id": USER_ID,
+                            "name": f"Camera {CAMERA_ID}",
                             "camera_on": True,
                             "is_recording": is_recording,
                             "pi_active": True,
@@ -258,11 +265,13 @@ def update_system_status(
                             "last_heartbeat": now.isoformat(),
                         }
                         
-                        # Upsert camera status (camera_id should be consistent)
+                        # Upsert camera status
                         supabase.table("cameras").upsert(
-                            {**camera_data, "id": f"{USER_ID}-{CAMERA_ID}"}, 
+                            camera_data, 
                             on_conflict="id"
                         ).execute()
+                        
+                        logger.debug("Camera status updated successfully")
                         
                     except Exception as cam_e:
                         logger.warning(f"Failed to update cameras table: {cam_e}")
@@ -362,25 +371,39 @@ def get_next_booking() -> Optional[Dict[str, Any]]:
     try:
         now = local_now()
         
-        # Query for next booking with proper time handling
-        # Format current time to match database format
-        now_str = now.strftime('%Y-%m-%d %H:%M:%S')
+        # Query for bookings today and in the future
+        today = now.strftime('%Y-%m-%d')
+        current_time = now.strftime('%H:%M')
         
+        # Get all confirmed bookings for today or future dates
         response = supabase.table("bookings")\
             .select("*")\
             .eq("camera_id", CAMERA_ID)\
             .eq("status", "confirmed")\
-            .gte("start_time", now_str)\
-            .order("start_time")\
-            .limit(1)\
+            .gte("date", today)\
+            .order("date, start_time")\
             .execute()
         
         if response.data and len(response.data) > 0:
-            booking = response.data[0]
-            logger.info(f"Found next booking: {booking['id']} at {booking.get('start_time')}")
-            return booking
-        else:
+            # Filter bookings to find the next valid one
+            for booking in response.data:
+                booking_date = booking['date']
+                booking_start = booking['start_time']
+                
+                # For today's bookings, check if start time hasn't passed
+                if booking_date == today:
+                    if booking_start >= current_time:
+                        logger.info(f"Found next booking: {booking['id']} at {booking_date} {booking_start}")
+                        return booking
+                else:
+                    # Future date bookings are always valid
+                    logger.info(f"Found next booking: {booking['id']} at {booking_date} {booking_start}")
+                    return booking
+            
             logger.debug("No upcoming bookings found")
+            return None
+        else:
+            logger.debug("No confirmed bookings found")
             return None
             
     except Exception as e:
