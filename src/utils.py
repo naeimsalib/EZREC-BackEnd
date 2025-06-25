@@ -220,6 +220,10 @@ def update_system_status(
             "storage_used": storage_used or get_storage_used(),
             "last_backup": last_backup,
             
+            # Camera status for dashboard
+            "cameras_online": 1,  # This Pi has 1 camera online
+            "total_cameras": 1,
+            
             # System metrics
             **metrics,
             
@@ -241,6 +245,28 @@ def update_system_status(
                 
                 if response.data:
                     logger.debug("System status updated successfully")
+                    
+                    # Also update cameras table for dashboard
+                    try:
+                        camera_data = {
+                            "user_id": USER_ID,
+                            "camera_on": True,
+                            "is_recording": is_recording,
+                            "pi_active": True,
+                            "last_seen": now.isoformat(),
+                            "ip_address": get_ip_address(),
+                            "last_heartbeat": now.isoformat(),
+                        }
+                        
+                        # Upsert camera status (camera_id should be consistent)
+                        supabase.table("cameras").upsert(
+                            {**camera_data, "id": f"{USER_ID}-{CAMERA_ID}"}, 
+                            on_conflict="id"
+                        ).execute()
+                        
+                    except Exception as cam_e:
+                        logger.warning(f"Failed to update cameras table: {cam_e}")
+                    
                     return True
                 else:
                     logger.warning(f"System status update returned no data (attempt {attempt + 1})")
@@ -336,12 +362,15 @@ def get_next_booking() -> Optional[Dict[str, Any]]:
     try:
         now = local_now()
         
-        # Query for next booking
+        # Query for next booking with proper time handling
+        # Format current time to match database format
+        now_str = now.strftime('%Y-%m-%d %H:%M:%S')
+        
         response = supabase.table("bookings")\
             .select("*")\
             .eq("camera_id", CAMERA_ID)\
             .eq("status", "confirmed")\
-            .gte("start_time", now.isoformat())\
+            .gte("start_time", now_str)\
             .order("start_time")\
             .limit(1)\
             .execute()
