@@ -236,9 +236,12 @@ def upload_all_existing_recordings():
         logger.error("Cannot proceed without recordings table")
         return
     
-    # Skip storage client initialization for now to avoid hanging
-    storage_client = None
-    logger.info("⚠️  Skipping storage client - uploading metadata only to database")
+    # Initialize storage client for cloud uploads
+    storage_client = get_storage_client()
+    if storage_client:
+        logger.info("✅ Storage client initialized - uploading to Supabase Storage")
+    else:
+        logger.info("⚠️  Storage client not available - uploading metadata only to database")
     
     recording_dir = Path(RECORDING_DIR)
     
@@ -328,24 +331,25 @@ def check_storage_bucket():
         return False
     
     try:
-        # List buckets to check if 'videos' exists
-        buckets = storage_client.list_buckets()
-        video_bucket_exists = any(bucket.get('name') == 'videos' for bucket in buckets)
-        
-        if video_bucket_exists:
+        # Try to list files in the videos bucket - this will fail if bucket doesn't exist
+        try:
+            storage_client.from_("videos").list()
             logger.info("✅ 'videos' bucket exists in Supabase Storage")
             return True
-        else:
-            logger.error("❌ 'videos' bucket not found in Supabase Storage")
-            print("\n🔧 To create the videos bucket:")
-            print("1. Go to your Supabase dashboard: https://supabase.com/dashboard")
-            print("2. Navigate to Storage")
-            print("3. Create a new bucket named 'videos'")
-            print("4. Set it to public if you want direct access to videos")
-            return False
+        except Exception as bucket_error:
+            if "not found" in str(bucket_error).lower() or "does not exist" in str(bucket_error).lower():
+                logger.error("❌ 'videos' bucket not found in Supabase Storage")
+                print("\n🔧 To create the videos bucket:")
+                print("1. Go to your Supabase dashboard: https://supabase.com/dashboard")
+                print("2. Navigate to Storage")
+                print("3. Create a new bucket named 'videos'")
+                print("4. Set it to public if you want direct access to videos")
+                return False
+            else:
+                raise bucket_error
             
     except Exception as e:
-        logger.error(f"❌ Error checking storage buckets: {e}")
+        logger.error(f"❌ Error checking storage bucket: {e}")
         return False
 
 def main():
@@ -360,10 +364,14 @@ def main():
     
     print("✅ Supabase connection successful")
     
-    # Skip bucket check for now to avoid hanging - proceed with database-only upload
+    # Check for storage bucket availability
     if STORAGE_AVAILABLE:
-        print("⚠️  Skipping storage bucket check - proceeding with database upload")
-        print("   📝 Recordings will be stored in database with local file paths")
+        bucket_exists = check_storage_bucket()
+        if bucket_exists:
+            print("✅ Supabase Storage bucket 'videos' found - enabling cloud uploads")
+        else:
+            print("⚠️  Storage bucket 'videos' not found - uploading metadata only")
+            print("   📝 Create the 'videos' bucket in Supabase Storage for cloud uploads")
     
     # Start upload process
     upload_all_existing_recordings()
