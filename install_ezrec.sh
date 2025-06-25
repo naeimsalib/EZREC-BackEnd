@@ -131,13 +131,7 @@ install_system_deps() {
         libopencv-dev \
         libatlas-base-dev \
         libhdf5-dev \
-        libhdf5-serial-dev \
-        libhdf5-103 \
-        libqtgui4 \
-        libqtwebkit4 \
-        libqt4-test \
         python3-pyqt5 \
-        libjasper-dev \
         liblapack-dev \
         gfortran
     
