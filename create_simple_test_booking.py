@@ -5,6 +5,7 @@ Works with the actual database schema (including title column)
 """
 import os
 import sys
+import uuid
 from datetime import datetime, timedelta
 
 # Add src directory to path
@@ -20,9 +21,12 @@ def create_simple_test_booking():
         start_time = now + timedelta(minutes=2)
         end_time = start_time + timedelta(minutes=1)
         
+        # Generate proper UUID for the booking ID
+        booking_id = str(uuid.uuid4())
+        
         # Use the actual database schema (with title column)
         booking_data = {
-            'id': f'simple-test-{int(now.timestamp())}',
+            'id': booking_id,
             'user_id': USER_ID,
             'camera_id': CAMERA_ID,
             'date': start_time.strftime('%Y-%m-%d'),
