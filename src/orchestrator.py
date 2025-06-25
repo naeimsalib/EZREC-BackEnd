@@ -214,8 +214,9 @@ class EZRECOrchestrator:
             """
             
             response = await self.db.execute_query(query)
-            if response.get('success') and response.get('data'):
-                return response['data']
+            # FIXED: execute_query returns data directly, not wrapped in success/data
+            if response and isinstance(response, list):
+                return response
             return []
             
         except Exception as e:

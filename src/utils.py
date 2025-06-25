@@ -433,6 +433,7 @@ class SupabaseManager:
     
     def __init__(self):
         self.client = supabase
+        self.supabase = supabase  # Add this for backward compatibility
         
     async def execute_query(self, query: str, params: Dict[str, Any] = None):
         """Execute a raw SQL query."""

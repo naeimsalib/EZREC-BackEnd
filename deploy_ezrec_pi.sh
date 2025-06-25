@@ -41,17 +41,18 @@ echo "   Deploy: $DEPLOY_DIR"
 echo "👤 User: $USER_EMAIL ($USER_ID)"
 echo
 
-# Step 1: Pull latest code
-echo "📥 STEP 1: Pulling latest code"
-echo "=============================="
+# Step 1: Verify source directory and make script executable
+echo "📥 STEP 1: Verifying source directory"
+echo "====================================="
 if [ -d "$SOURCE_DIR" ]; then
     cd "$SOURCE_DIR"
-    echo "🔄 Pulling latest changes..."
-    git pull origin main
-    echo "✅ Code updated"
+    echo "✅ Source directory found: $SOURCE_DIR"
+    echo "🔧 Making deployment script executable..."
+    chmod +x "$SOURCE_DIR/deploy_ezrec_pi.sh" 2>/dev/null || true
+    echo "✅ Script permissions set"
 else
     echo "❌ Source directory $SOURCE_DIR not found"
-    echo "   Please clone the repository first:"
+    echo "   Please ensure you're in the correct directory or clone the repository:"
     echo "   git clone https://github.com/naeimsalib/EZREC-BackEnd.git ~/code/EZREC-BackEnd"
     exit 1
 fi
