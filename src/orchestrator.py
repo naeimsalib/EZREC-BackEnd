@@ -16,7 +16,7 @@ import signal
 # Add the src directory to Python path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from utils_fixed import (
+from utils import (
     setup_logging, logger, get_next_booking, upload_video_to_supabase,
     update_system_status, save_booking, load_booking, complete_booking
 )
