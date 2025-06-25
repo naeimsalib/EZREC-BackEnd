@@ -11,7 +11,7 @@ echo "---------------------------"
 echo "Removing JWT tokens from fix_env_and_permissions.sh..."
 
 # Replace the actual token with a placeholder
-sed -i 's/eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.[^'"'"']*/YOUR_SUPABASE_ANON_KEY_HERE/g' fix_env_and_permissions.sh
+sed -i 's/JWT_TOKEN_PATTERN_HERE/YOUR_SUPABASE_ANON_KEY_HERE/g' fix_env_and_permissions.sh
 
 echo "✅ JWT tokens replaced with placeholders"
 
