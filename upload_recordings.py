@@ -39,10 +39,14 @@ def parse_recording_filename(filename):
             recording_date = datetime.strptime(date_str, '%Y%m%d').strftime('%Y-%m-%d')
             recording_time = datetime.strptime(time_str, '%H%M%S').strftime('%H:%M:%S')
             
+            # Create start_time as full timestamp
+            start_time = datetime.strptime(f"{date_str} {time_str}", '%Y%m%d %H%M%S')
+            
             return {
                 'booking_id': booking_id,
                 'date': recording_date,
                 'time': recording_time,
+                'start_time': start_time,
                 'filename': filename
             }
     except Exception as e:
@@ -60,9 +64,17 @@ def upload_recording_to_database(recording_path, booking_info=None):
         if not booking_info:
             booking_info = parse_recording_filename(os.path.basename(recording_path))
         
-        # Create recording record
+        # Create start_time and end_time
+        if booking_info and booking_info.get('start_time'):
+            start_time = booking_info['start_time']
+            # Assume 3-minute recording duration if not specified
+            end_time = start_time.replace(second=start_time.second + 180)  # 3 minutes
+        else:
+            start_time = datetime.fromtimestamp(file_stats.st_ctime)
+            end_time = datetime.fromtimestamp(file_stats.st_mtime)
+        
+        # Create recording record compatible with your database schema
         recording_data = {
-            'id': file_hash,  # Use file hash as unique ID
             'user_id': USER_ID,
             'camera_id': CAMERA_ID,
             'booking_id': booking_info.get('booking_id') if booking_info else None,
@@ -71,11 +83,15 @@ def upload_recording_to_database(recording_path, booking_info=None):
             'file_size': file_stats.st_size,
             'file_hash': file_hash,
             'duration_seconds': None,  # Could be calculated with ffprobe
-            'recording_date': booking_info.get('date') if booking_info else datetime.now().strftime('%Y-%m-%d'),
-            'recording_time': booking_info.get('time') if booking_info else datetime.now().strftime('%H:%M:%S'),
-            'created_at': datetime.fromtimestamp(file_stats.st_ctime).isoformat(),
-            'uploaded_at': datetime.now().isoformat(),
+            'start_time': start_time.isoformat(),
+            'end_time': end_time.isoformat(),
+            'recording_date': booking_info.get('date') if booking_info else start_time.strftime('%Y-%m-%d'),
             'status': 'completed',
+            'format': 'mp4',
+            'resolution': '1920x1080',
+            'fps': 30,
+            'upload_status': 'uploaded',
+            'uploaded_at': datetime.now().isoformat(),
             'metadata': {
                 'file_size_mb': round(file_stats.st_size / (1024*1024), 2),
                 'camera_type': 'pi_camera',
@@ -86,8 +102,8 @@ def upload_recording_to_database(recording_path, booking_info=None):
             }
         }
         
-        # Check if recording already exists
-        existing = supabase.table('recordings').select('id').eq('id', file_hash).execute()
+        # Check if recording already exists (by filename and file_size)
+        existing = supabase.table('recordings').select('id').eq('filename', recording_data['filename']).eq('file_size', recording_data['file_size']).execute()
         
         if existing.data:
             logger.info(f"Recording {recording_data['filename']} already exists in database")
@@ -213,13 +229,16 @@ def main():
         
         # Show current recordings in database
         try:
-            recordings = supabase.table('recordings').select('filename, file_size, recording_date, recording_time').order('created_at', desc=True).execute()
+            recordings = supabase.table('recordings').select('filename, file_size, recording_date, start_time').order('created_at', desc=True).execute()
             
             if recordings.data:
                 print(f"\n📊 Current recordings in database ({len(recordings.data)} total):")
                 for rec in recordings.data[:10]:  # Show first 10
                     size_mb = round(rec.get('file_size', 0) / (1024*1024), 1)
-                    print(f"  • {rec['filename']} - {size_mb}MB - {rec['recording_date']} {rec['recording_time']}")
+                    start_time = rec.get('start_time', 'Unknown')
+                    if 'T' in str(start_time):
+                        start_time = datetime.fromisoformat(start_time.replace('Z', '+00:00')).strftime('%H:%M:%S')
+                    print(f"  • {rec['filename']} - {size_mb}MB - {rec['recording_date']} {start_time}")
                 
                 if len(recordings.data) > 10:
                     print(f"  ... and {len(recordings.data) - 10} more")
