@@ -138,6 +138,8 @@ class EZRECOrchestrator:
     def recording_worker(self):
         """Enhanced recording worker with better error handling and logging."""
         self.logger.info("Recording worker thread started")
+        consecutive_failures = 0
+        max_consecutive_failures = 5
         
         while not self.stop_event.is_set():
             try:
@@ -148,6 +150,8 @@ class EZRECOrchestrator:
                         self.logger.warning("No active booking found, but recording is active. Stopping recording.")
                         self.camera_service.stop_recording()
                     
+                    # Reset failure counter when no booking
+                    consecutive_failures = 0
                     if self.stop_event.wait(5):
                         break
                     continue
@@ -171,10 +175,28 @@ class EZRECOrchestrator:
                             success = self.camera_service.start_recording(booking)
                             if success:
                                 self.current_booking_id = booking['id']
+                                consecutive_failures = 0  # Reset failure counter on success
                             else:
-                                self.logger.error(f"Failed to start recording for booking {booking['id']}")
+                                consecutive_failures += 1
+                                self.logger.error(f"Failed to start recording for booking {booking['id']} (attempt {consecutive_failures})")
+                                
+                                # If we've failed too many times, wait longer before retrying
+                                if consecutive_failures >= max_consecutive_failures:
+                                    self.logger.warning(f"Too many consecutive recording failures ({consecutive_failures}). Waiting 30 seconds before retry.")
+                                    if self.stop_event.wait(30):
+                                        break
+                                    continue
+                                    
                         except Exception as e:
+                            consecutive_failures += 1
                             self._handle_error(f"Error starting recording for booking {booking['id']}", e)
+                            
+                            # Implement exponential backoff for failures
+                            backoff_time = min(30, 2 ** min(consecutive_failures, 5))
+                            self.logger.warning(f"Recording failed {consecutive_failures} times. Waiting {backoff_time}s before retry.")
+                            if self.stop_event.wait(backoff_time):
+                                break
+                            continue
                 
                 # Check if the booking has ended
                 elif now >= end_time:
@@ -183,6 +205,7 @@ class EZRECOrchestrator:
                         try:
                             self.camera_service.stop_recording()
                             self.current_booking_id = None
+                            consecutive_failures = 0  # Reset counter after successful completion
                         except Exception as e:
                             self._handle_error(f"Error stopping recording for booking {booking['id']}", e)
                     

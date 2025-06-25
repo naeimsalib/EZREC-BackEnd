@@ -63,16 +63,35 @@ class CameraInterface:
         """Initialize camera with retry logic and proper error handling."""
         for attempt in range(max_retries):
             try:
+                # Run camera detection first for diagnostics
+                if attempt == 0:  # Only on first attempt to avoid spam
+                    try:
+                        available_cameras = detect_cameras()
+                        self.logger.info(f"Available cameras detected: {available_cameras}")
+                    except Exception as e:
+                        self.logger.warning(f"Camera detection failed: {e}")
+                
                 self._detect_and_initialize_camera()
-                self.logger.info(f"Camera initialized successfully on attempt {attempt + 1}")
-                return
+                
+                # Verify camera is actually working by capturing a test frame
+                test_frame = self.capture_frame()
+                if test_frame is not None:
+                    self.logger.info(f"Camera initialized and verified successfully on attempt {attempt + 1}")
+                    return
+                else:
+                    self.logger.warning("Camera initialized but failed test frame capture")
+                    self.release()  # Clean up before retry
+                    raise RuntimeError("Camera test frame capture failed")
+                    
             except Exception as e:
                 self.logger.warning(f"Camera initialization attempt {attempt + 1} failed: {e}")
                 if attempt < max_retries - 1:
+                    self.logger.info(f"Retrying camera initialization in {delay} seconds...")
                     time.sleep(delay)
                 else:
                     self.logger.error("All camera initialization attempts failed")
-                    raise RuntimeError("Unable to initialize any camera after multiple attempts")
+                    # Don't raise exception - let camera interface handle gracefully
+                    self.camera_type = None
 
     def _detect_and_initialize_camera(self):
         """Detect and initialize the best available camera."""
@@ -384,17 +403,37 @@ class CameraInterface:
         return info
 
     def health_check(self) -> bool:
-        """Perform a health check on the camera."""
+        """Perform a comprehensive health check on the camera."""
         try:
+            # Check if camera is initialized
             if not self._is_camera_ready():
+                self.logger.warning("Camera health check failed: Camera not ready/initialized")
+                return False
+            
+            # Check camera type and specific health
+            if self.camera_type == 'picamera2':
+                if not self.picam:
+                    self.logger.warning("Camera health check failed: Pi Camera object is None")
+                    return False
+            elif self.camera_type == 'opencv':
+                if not self.cap or not self.cap.isOpened():
+                    self.logger.warning("Camera health check failed: OpenCV camera not opened")
+                    return False
+            else:
+                self.logger.warning("Camera health check failed: Unknown camera type")
                 return False
                 
-            # Try to capture a test frame
+            # Try to capture a test frame (most comprehensive test)
             frame = self.capture_frame()
-            return frame is not None
+            if frame is not None:
+                self.logger.debug("Camera health check passed")
+                return True
+            else:
+                self.logger.warning("Camera health check failed: Unable to capture test frame")
+                return False
             
         except Exception as e:
-            self.logger.error(f"Camera health check failed: {e}")
+            self.logger.error(f"Camera health check failed with exception: {e}")
             return False
 
     def _is_camera_ready(self) -> bool:

@@ -342,15 +342,26 @@ def load_booking() -> Optional[Dict[str, Any]]:
             return None
             
         # Check if booking is still valid (not expired)
-        if 'end_time' in booking:
+        if 'end_time' in booking and 'date' in booking:
             try:
-                end_time = datetime.fromisoformat(booking['end_time'])
+                # Handle both ISO format and simple time format
+                end_time_str = booking['end_time']
+                if 'T' in end_time_str or 'Z' in end_time_str or '+' in end_time_str:
+                    # ISO format timestamp
+                    end_time = datetime.fromisoformat(booking['end_time'])
+                else:
+                    # Simple time format (HH:MM) - combine with booking date
+                    booking_date = booking['date']
+                    end_time = datetime.strptime(f"{booking_date} {end_time_str}", "%Y-%m-%d %H:%M")
+                    end_time = end_time.replace(tzinfo=local_now().tzinfo)
+                    
                 if local_now() > end_time:
                     logger.info(f"Booking {booking['id']} has expired, removing")
                     remove_booking()
                     return None
-            except ValueError:
-                logger.warning(f"Invalid end_time format in booking: {booking.get('end_time')}")
+            except ValueError as e:
+                logger.warning(f"Invalid end_time format in booking: {booking.get('end_time')} - {e}")
+                # Don't remove booking for time format issues, just warn
         
         logger.debug(f"Loaded booking: {booking['id']}")
         return booking
