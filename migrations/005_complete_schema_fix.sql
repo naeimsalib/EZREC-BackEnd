@@ -46,6 +46,14 @@ BEGIN
         RAISE NOTICE 'Added cpu_usage_percent column to system_status table';
     END IF;
     
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'system_status' AND column_name = 'load_average'
+    ) THEN
+        ALTER TABLE system_status ADD COLUMN load_average FLOAT[] DEFAULT ARRAY[0.0, 0.0, 0.0];
+        RAISE NOTICE 'Added load_average column to system_status table';
+    END IF;
+    
     -- Memory metrics
     IF NOT EXISTS (
         SELECT 1 FROM information_schema.columns 
@@ -163,6 +171,7 @@ UPDATE system_status SET
     camera_id = '0' WHERE camera_id IS NULL,
     cpu_count = 4 WHERE cpu_count IS NULL,
     cpu_usage_percent = 0.0 WHERE cpu_usage_percent IS NULL,
+    load_average = ARRAY[0.0, 0.0, 0.0] WHERE load_average IS NULL,
     memory_usage_percent = 0.0 WHERE memory_usage_percent IS NULL,
     memory_total_gb = 0.0 WHERE memory_total_gb IS NULL,
     memory_available_gb = 0.0 WHERE memory_available_gb IS NULL,
