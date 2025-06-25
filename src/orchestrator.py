@@ -209,13 +209,23 @@ class EZRECOrchestrator:
                         except Exception as e:
                             self._handle_error(f"Error stopping recording for booking {booking['id']}", e)
                     
-                    # Remove the completed booking
+                    # Complete the booking (remove locally + update database)
                     try:
-                        from utils import remove_booking
-                        remove_booking()
-                        self.logger.info(f"Removed completed booking {booking['id']}")
+                        from utils import complete_booking
+                        success = complete_booking(booking['id'])
+                        if success:
+                            self.logger.info(f"Completed booking {booking['id']} (local + database)")
+                        else:
+                            self.logger.warning(f"Failed to complete booking {booking['id']}")
                     except Exception as e:
-                        self.logger.warning(f"Failed to remove completed booking: {e}")
+                        self.logger.error(f"Error completing booking {booking['id']}: {e}")
+                        # Fallback to local removal only
+                        try:
+                            from utils import remove_booking
+                            remove_booking()
+                            self.logger.info(f"Fallback: Removed local booking file for {booking['id']}")
+                        except Exception as fallback_e:
+                            self.logger.error(f"Fallback removal also failed: {fallback_e}")
 
                 # Sleep for 1 second for precision, but check stop event
                 if self.stop_event.wait(1):

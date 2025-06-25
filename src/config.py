@@ -105,6 +105,9 @@ LOG_LEVEL = get_env_var("LOG_LEVEL", "INFO")
 LOG_MAX_BYTES = get_env_var("LOG_MAX_BYTES", 10*1024*1024, var_type=int)  # 10MB
 LOG_BACKUP_COUNT = get_env_var("LOG_BACKUP_COUNT", 5, var_type=int)
 
+# Booking Management
+DELETE_COMPLETED_BOOKINGS = get_env_var("DELETE_COMPLETED_BOOKINGS", False, var_type=bool)  # Mark as completed by default
+
 # Network Configuration
 NETWORK_TIMEOUT = get_env_var("NETWORK_TIMEOUT", 30, var_type=int)
 UPLOAD_RETRY_COUNT = get_env_var("UPLOAD_RETRY_COUNT", 3, var_type=int)

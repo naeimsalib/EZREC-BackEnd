@@ -356,8 +356,8 @@ def load_booking() -> Optional[Dict[str, Any]]:
                     end_time = end_time.replace(tzinfo=local_now().tzinfo)
                     
                 if local_now() > end_time:
-                    logger.info(f"Booking {booking['id']} has expired, removing")
-                    remove_booking()
+                    logger.info(f"Booking {booking['id']} has expired, completing")
+                    complete_booking(booking['id'])
                     return None
             except ValueError as e:
                 logger.warning(f"Invalid end_time format in booking: {booking.get('end_time')} - {e}")
@@ -386,7 +386,7 @@ def get_next_booking() -> Optional[Dict[str, Any]]:
         today = now.strftime('%Y-%m-%d')
         current_time = now.strftime('%H:%M')
         
-        # Get all confirmed bookings for today or future dates
+        # Get all confirmed bookings for today or future dates (exclude completed)
         response = supabase.table("bookings")\
             .select("*")\
             .eq("camera_id", CAMERA_ID)\
@@ -431,6 +431,69 @@ def remove_booking() -> bool:
         return True
     except Exception as e:
         logger.error(f"Error removing booking: {e}")
+        return False
+
+def remove_booking_from_database(booking_id: str) -> bool:
+    """Remove/mark booking as completed in the database."""
+    if not supabase:
+        logger.warning("Supabase client not available for booking removal")
+        return False
+    
+    try:
+        from config import DELETE_COMPLETED_BOOKINGS
+        
+        if DELETE_COMPLETED_BOOKINGS:
+            # Option 1: Completely delete booking
+            response = supabase.table("bookings")\
+                .delete()\
+                .eq("id", booking_id)\
+                .execute()
+            
+            if response.data:
+                logger.info(f"Booking {booking_id} deleted from database")
+                return True
+            else:
+                logger.warning(f"Failed to delete booking {booking_id}")
+                return False
+        else:
+            # Option 2: Mark booking as completed (default - preserves history)
+            response = supabase.table("bookings")\
+                .update({"status": "completed"})\
+                .eq("id", booking_id)\
+                .execute()
+            
+            if response.data:
+                logger.info(f"Booking {booking_id} marked as completed in database")
+                return True
+            else:
+                logger.warning(f"Failed to update booking {booking_id} status")
+                return False
+            
+    except Exception as e:
+        logger.error(f"Error removing booking {booking_id} from database: {e}")
+        return False
+
+def complete_booking(booking_id: str) -> bool:
+    """Complete a booking by removing local file and updating database status."""
+    try:
+        # Remove local booking file
+        local_removed = remove_booking()
+        
+        # Update database status
+        db_updated = remove_booking_from_database(booking_id)
+        
+        if local_removed and db_updated:
+            logger.info(f"Booking {booking_id} completed successfully (local + database)")
+            return True
+        elif local_removed:
+            logger.warning(f"Booking {booking_id} removed locally but database update failed")
+            return True  # Still return True since local cleanup succeeded
+        else:
+            logger.error(f"Failed to complete booking {booking_id}")
+            return False
+            
+    except Exception as e:
+        logger.error(f"Error completing booking {booking_id}: {e}")
         return False
 
 def get_storage_used() -> int:
