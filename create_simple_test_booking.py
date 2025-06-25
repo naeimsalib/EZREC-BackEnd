@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
 try:
-    from utils import supabase, logger, local_now
+    from utils import supabase, logger
     from config import CAMERA_ID, USER_ID
 except ImportError as e:
     print(f"❌ Import error: {e}")
@@ -27,8 +27,8 @@ def create_simple_test_booking():
         return False
     
     try:
-        # Use the utils local_now() function for proper timezone handling
-        now_local = local_now()
+        # Use datetime.now() for local time
+        now_local = datetime.now()
         start_time = now_local + timedelta(minutes=2)
         end_time = start_time + timedelta(minutes=1)  # 1 minute recording
         
@@ -85,7 +85,7 @@ def main():
     print("=" * 60)
     
     # Show current system time info
-    now_local = local_now()
+    now_local = datetime.now()
     
     print(f"🕐 Current local time: {now_local.strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"📍 This will create a booking for {(now_local + timedelta(minutes=2)).strftime('%H:%M')}")
