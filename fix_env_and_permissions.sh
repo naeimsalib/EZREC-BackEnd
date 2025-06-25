@@ -14,7 +14,7 @@ if ! grep -q "SUPABASE_ANON_KEY" /opt/ezrec-backend/.env; then
     echo "❌ Missing SUPABASE_ANON_KEY - adding it"
     
     # Add the anon key after the service role key
-    sudo sed -i '/SUPABASE_SERVICE_ROLE_KEY/a SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlzem1zYWF5eHBkcm92ZWFscnJwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgzNjYwMTMsImV4cCI6MjA2Mzk0MjAxM30.qLd-Jh8eQRPJG4K19ZMSB1DdVEsIUG7H-C1CG0_4R7k' /opt/ezrec-backend/.env
+    sudo sed -i '/SUPABASE_SERVICE_ROLE_KEY/a SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY_HERE /opt/ezrec-backend/.env
     
     echo "✅ Added SUPABASE_ANON_KEY"
 else
