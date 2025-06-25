@@ -6,15 +6,10 @@ python-dotenv==1.0.0
 psutil==5.9.8
 pytz==2024.1
 
-# Supabase Stack - Compatible versions for Raspberry Pi
+# Supabase Stack - Only the main package needed
 supabase==2.2.1
-gotrue==2.8.0
-postgrest==0.13.0
-storage3==0.7.7
-realtime==1.0.6
-supafunc==0.3.3
 
-# HTTP Client Stack - Fixed versions to avoid compatibility issues
+# HTTP Client Stack - Compatible versions
 httpx==0.24.1
 httpcore==0.17.3
 h11==0.14.0
@@ -22,11 +17,6 @@ h11==0.14.0
 # Computer Vision & Media Processing
 opencv-python==4.8.1.78
 numpy==1.26.4
-ffmpeg-python==0.2.0
-
-# Testing Framework (optional)
-pytest==7.4.3
-pytest-asyncio==0.21.1
 
 # Note: System packages required on Raspberry Pi:
 # - python3-libcamera

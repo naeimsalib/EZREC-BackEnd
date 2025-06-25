@@ -105,21 +105,8 @@ install_system_deps() {
         python3-venv \
         python3-dev \
         git \
-        curl \
-        wget \
-        unzip \
         build-essential \
-        pkg-config \
-        cmake \
-        libjpeg-dev \
-        libpng-dev \
-        libtiff-dev \
-        libavcodec-dev \
-        libavformat-dev \
-        libswscale-dev \
-        libgtk2.0-dev \
-        libcanberra-gtk-module \
-        libcanberra-gtk3-module
+        pkg-config
     
     # Camera and media packages (Raspberry Pi specific)
     apt install -y \
@@ -127,13 +114,7 @@ install_system_deps() {
         python3-picamera2 \
         libcamera-apps \
         ffmpeg \
-        v4l-utils \
-        libopencv-dev \
-        libatlas-base-dev \
-        libhdf5-dev \
-        python3-pyqt5 \
-        liblapack-dev \
-        gfortran
+        v4l-utils
     
     # Additional Pi-specific packages (optional - handle conflicts gracefully)
     if [[ -f /etc/rpi-issue ]]; then
