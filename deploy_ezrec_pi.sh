@@ -13,7 +13,19 @@ echo
 
 # Configuration
 DEPLOY_DIR="/opt/ezrec-backend"
-SOURCE_DIR="$HOME/code/EZREC-BackEnd"
+# Detect actual source directory (works with sudo)
+if [ -n "$SUDO_USER" ]; then
+    # Running with sudo, get the actual user's home directory
+    ACTUAL_USER_HOME=$(eval echo ~$SUDO_USER)
+    SOURCE_DIR="$ACTUAL_USER_HOME/code/EZREC-BackEnd"
+else
+    # Running without sudo
+    SOURCE_DIR="$HOME/code/EZREC-BackEnd"
+fi
+# Also check if we're already in the correct directory
+if [ -f "$(pwd)/src/orchestrator.py" ] && [ -f "$(pwd)/requirements.txt" ]; then
+    SOURCE_DIR="$(pwd)"
+fi
 SERVICE_NAME="ezrec-backend"
 USER_NAME="ezrec"
 
