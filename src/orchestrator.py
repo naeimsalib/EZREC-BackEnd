@@ -158,14 +158,41 @@ class EZRECOrchestrator:
 
                 now = datetime.now().astimezone()
                 
-                # Parse booking date and time (format: date="2025-06-25", start_time="00:30")
+                # Parse booking date and time with flexible format handling
                 booking_date = booking["date"]
                 booking_start = booking["start_time"] 
                 booking_end = booking["end_time"]
                 
-                # Combine date and time to create full datetime objects
-                start_time = datetime.strptime(f"{booking_date} {booking_start}", "%Y-%m-%d %H:%M").replace(tzinfo=now.tzinfo)
-                end_time = datetime.strptime(f"{booking_date} {booking_end}", "%Y-%m-%d %H:%M").replace(tzinfo=now.tzinfo)
+                # Helper function to parse time with multiple format support
+                def parse_time_flexible(date_str, time_str):
+                    # Try different time formats
+                    time_formats = [
+                        "%Y-%m-%d %H:%M",           # HH:MM format
+                        "%Y-%m-%d %H:%M:%S",        # HH:MM:SS format  
+                        "%Y-%m-%d %H:%M:%S.%f"      # HH:MM:SS.microseconds format
+                    ]
+                    
+                    for fmt in time_formats:
+                        try:
+                            return datetime.strptime(f"{date_str} {time_str}", fmt).replace(tzinfo=now.tzinfo)
+                        except ValueError:
+                            continue
+                    
+                    # If all formats fail, try to extract just HH:MM
+                    try:
+                        if ":" in time_str:
+                            time_parts = time_str.split(":")
+                            if len(time_parts) >= 2:
+                                clean_time = f"{time_parts[0]}:{time_parts[1]}"
+                                return datetime.strptime(f"{date_str} {clean_time}", "%Y-%m-%d %H:%M").replace(tzinfo=now.tzinfo)
+                    except Exception:
+                        pass
+                    
+                    raise ValueError(f"Unable to parse time format: {time_str}")
+                
+                # Parse start and end times with flexible format support
+                start_time = parse_time_flexible(booking_date, booking_start)
+                end_time = parse_time_flexible(booking_date, booking_end)
 
                 # Check if we're within the booking window
                 if start_time <= now < end_time:
