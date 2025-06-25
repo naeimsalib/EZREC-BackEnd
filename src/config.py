@@ -47,9 +47,16 @@ LOG_DIR = BASE_DIR / "logs"
 RECORDING_DIR = BASE_DIR / "recordings"
 ASSETS_DIR = BASE_DIR / "user_assets"
 
-# Create directories if they don't exist
+# Create directories if they don't exist (with error handling for permissions)
 for directory in [TEMP_DIR, UPLOAD_DIR, LOG_DIR, RECORDING_DIR, ASSETS_DIR]:
-    directory.mkdir(parents=True, exist_ok=True)
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+    except PermissionError:
+        # Skip directory creation if permission denied (directories should already exist)
+        logging.warning(f"Permission denied creating {directory}, assuming it exists")
+        pass
+    except Exception as e:
+        logging.warning(f"Error creating directory {directory}: {e}")
 
 # Supabase Configuration (Required)
 SUPABASE_URL = get_env_var("SUPABASE_URL", required=True)
