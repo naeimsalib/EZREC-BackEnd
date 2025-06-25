@@ -118,7 +118,7 @@ def get_system_metrics() -> Dict[str, Any]:
             # CPU metrics
             "cpu_usage_percent": psutil.cpu_percent(interval=0.5),
             "cpu_count": psutil.cpu_count(),
-            "load_average": os.getloadavg() if hasattr(os, 'getloadavg') else None,
+            "load_average": list(os.getloadavg()) if hasattr(os, 'getloadavg') else [0.0, 0.0, 0.0],
             
             # Memory metrics
             "memory_usage_percent": psutil.virtual_memory().percent,
