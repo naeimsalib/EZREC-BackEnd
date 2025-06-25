@@ -1,477 +1,252 @@
-# EZREC Backend - Optimized for Raspberry Pi
+# EZREC Backend - Raspberry Pi Camera Recording System
 
-Backend services and camera management system for the EZREC SmartCam Soccer platform, specifically optimized for Raspberry Pi deployment with enhanced reliability, monitoring, and performance.
+🎬 **Automated camera recording system** for Raspberry Pi with Supabase integration. Perfect for sports recording, security, or any scheduled recording needs.
 
-## 🎯 Key Features
+## ✨ Features
 
-- **Intelligent Camera Detection**: Automatic detection and configuration of Pi Camera and USB cameras
-- **Robust Recording Management**: Automated recording based on booking schedules with error recovery
-- **Enhanced System Monitoring**: Comprehensive health monitoring and logging
-- **Production-Ready Deployment**: Systemd service with security hardening and resource limits
-- **Optimized Configuration**: Environment-based configuration with validation
-- **Comprehensive Testing**: Built-in test suite for validation and troubleshooting
+- 🎯 **Automatic Recording**: Schedule-based recording with precise timing
+- 📹 **Smart Camera Support**: Pi Camera + USB camera fallback
+- 🔄 **Real-time Monitoring**: Live status updates to dashboard
+- 🛡️ **Production Ready**: Systemd service with error recovery
+- 📊 **Health Monitoring**: Comprehensive diagnostics and logging
+- ☁️ **Cloud Integration**: Supabase database synchronization
 
-## 🚀 Quick Start
+## 🚀 One-Command Installation
 
-### Prerequisites
-
-- Raspberry Pi 4 (recommended) or Raspberry Pi 3B+
-- Raspberry Pi OS (Bullseye or newer)
-- Camera module (Pi Camera or USB camera)
-- Network connection
-- Supabase account and project
-
-### Installation
-
-1. **Clone the repository:**
+**For a fresh Raspberry Pi:**
 
 ```bash
-git clone https://github.com/yourusername/EZREC-BackEnd.git
+# 1. Clone the repository
+git clone https://github.com/naeimsalib/EZREC-BackEnd.git
 cd EZREC-BackEnd
-```
 
-2. **Run the automated setup:**
+# 2. Run complete installation (one command!)
+sudo ./deploy_ezrec.sh
 
-```bash
-sudo chmod +x raspberry_pi_setup.sh
-sudo ./raspberry_pi_setup.sh
-```
+# 3. Configure your Supabase credentials
+sudo ./create_env_file.sh
+sudo nano /opt/ezrec-backend/.env  # Add your Supabase details
 
-3. **Configure your environment:**
-
-```bash
-sudo nano /opt/ezrec-backend/.env
-```
-
-4. **Start the service:**
-
-```bash
+# 4. Start the service
 sudo systemctl start ezrec-backend
-```
-
-5. **Verify installation:**
-
-```bash
-ezrec status
-ezrec health
-```
-
-## 📋 Configuration
-
-### Environment Variables
-
-Copy `.env.example` to `.env` and configure the following:
-
-#### Required Configuration
-
-```bash
-# Supabase Configuration
-SUPABASE_URL=https://your-project-id.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=your_service_role_key_here
-
-# User Configuration
-USER_ID=your_user_id_here
-USER_EMAIL=your_email@example.com
-```
-
-#### Camera Configuration
-
-```bash
-# Camera Settings
-CAMERA_ID=raspberry_pi_camera
-CAMERA_NAME=Raspberry Pi Camera
-CAMERA_LOCATION=Soccer Field 1
-RECORD_WIDTH=1920
-RECORD_HEIGHT=1080
-RECORD_FPS=30
-```
-
-#### Optional Settings
-
-```bash
-# Debug and Logging
-DEBUG=false
-LOG_LEVEL=INFO
-
-# Performance Tuning
-RECORDING_BITRATE=10000000
-NETWORK_TIMEOUT=30
-```
-
-### Configuration Validation
-
-The system automatically validates configuration on startup and provides helpful error messages for missing or invalid settings.
-
-## 🎥 Camera Support
-
-### Supported Cameras
-
-- **Pi Camera Module**: Primary support via `picamera2` library
-- **USB Cameras**: Secondary support via OpenCV
-- **Multiple Cameras**: Automatic detection and selection
-
-### Camera Detection
-
-Run the camera detection utility:
-
-```bash
-cd /opt/ezrec-backend
-sudo -u ezrec ./venv/bin/python src/find_camera.py
-```
-
-This provides a comprehensive report of available cameras and their capabilities.
-
-## 🏃‍♂️ Running the System
-
-### Service Management
-
-Use the management script for easy control:
-
-```bash
-# Start the service
-ezrec start
-
-# Stop the service
-ezrec stop
-
-# Restart the service
-ezrec restart
-
-# Check status
-ezrec status
-
-# View live logs
-ezrec logs
-
-# Run health check
-ezrec health
-
-# Update the system
-ezrec update
-
-# Edit configuration
-ezrec config
-```
-
-### Direct Systemd Commands
-
-```bash
-# Service control
-sudo systemctl start ezrec-backend
-sudo systemctl stop ezrec-backend
-sudo systemctl restart ezrec-backend
-sudo systemctl status ezrec-backend
-
-# Enable/disable autostart
 sudo systemctl enable ezrec-backend
-sudo systemctl disable ezrec-backend
 
-# View logs
-sudo journalctl -u ezrec-backend -f
+# 5. Verify everything works
+./check_recordings.sh
 ```
 
-## 🔧 Testing and Validation
+**That's it! Your Pi is now ready for automatic recording.** 🎉
 
-### Test Suite
+## 📋 Prerequisites
 
-Run the comprehensive test suite:
+- **Hardware**: Raspberry Pi 4 (recommended) or Pi 3B+
+- **OS**: Raspberry Pi OS (Bullseye or newer)
+- **Camera**: Pi Camera module or USB camera
+- **Network**: WiFi or Ethernet connection
+- **Account**: Free Supabase account
+
+## ⚙️ Configuration
+
+### Supabase Setup
+
+1. Create a free account at [supabase.com](https://supabase.com)
+2. Create a new project
+3. Get your Project URL and Service Role Key from Settings → API
+4. Add them to `/opt/ezrec-backend/.env`:
 
 ```bash
-cd /opt/ezrec-backend
-sudo -u ezrec ./venv/bin/python test_system.py
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+USER_ID=your_unique_user_id
+CAMERA_ID=raspberry_pi_camera
 ```
 
-### Quick Tests
+### Database Tables
 
-For faster validation (skips camera tests):
+EZREC automatically works with these Supabase tables:
+
+- `bookings`: Scheduled recording sessions
+- `system_status`: Real-time Pi status
+- `cameras`: Camera visibility for dashboard
+
+## 🎬 How It Works
+
+1. **Booking Creation**: Create bookings in Supabase with camera_id and schedule
+2. **Auto-Detection**: EZREC polls for new bookings every 5 seconds
+3. **Smart Recording**: Automatically starts/stops at scheduled times
+4. **Status Updates**: Reports camera status to dashboard every 10 seconds
+5. **File Management**: Saves recordings to `/opt/ezrec-backend/recordings/`
+
+## 📱 Management Commands
+
+### Check Status & Recordings
 
 ```bash
-sudo -u ezrec ./venv/bin/python test_system.py --quick
+./check_recordings.sh                    # Complete status check
+sudo systemctl status ezrec-backend      # Service status
+sudo journalctl -u ezrec-backend -f      # Live logs
+ls -la /opt/ezrec-backend/recordings/    # View recordings
 ```
 
-### Test Report
-
-Generate a detailed test report:
+### Troubleshooting
 
 ```bash
-sudo -u ezrec ./venv/bin/python test_system.py --save-report
+./camera_diagnostic.py                   # Camera diagnostics
+./debug_camera_bookings.py              # Booking detection debug
+./verify_installation.sh                # Full system check
+./restart_ezrec.sh                      # Service restart
 ```
 
-## 📊 Monitoring and Logging
-
-### System Health
-
-The system provides comprehensive health monitoring:
-
-- **Camera Health**: Automatic camera detection and validation
-- **System Metrics**: CPU, memory, disk usage, temperature
-- **Network Status**: Connection monitoring and retry logic
-- **Error Tracking**: Centralized error counting and alerting
-
-### Logging
-
-Logs are automatically managed with rotation:
-
-- **Service Logs**: `sudo journalctl -u ezrec-backend -f`
-- **Application Logs**: `/opt/ezrec-backend/logs/ezrec.log`
-- **Error Logs**: Integrated with systemd journal
-- **Log Rotation**: Automatic cleanup of old logs
-
-### Performance Monitoring
-
-Monitor system performance:
+### System Snapshot (for replication)
 
 ```bash
-# Check system resources
-ezrec health
-
-# View detailed logs
-sudo journalctl -u ezrec-backend --since "1 hour ago"
-
-# Check disk usage
-df -h /opt/ezrec-backend
-
-# Monitor temperature (Pi only)
-vcgencmd measure_temp
+./system_snapshot.sh > my_setup.txt     # Capture complete setup
 ```
 
-## 🔒 Security and Permissions
+## 🔧 Advanced Configuration
 
-### Service User
-
-The system runs under a dedicated `ezrec` user with minimal privileges:
-
-- Home directory: `/opt/ezrec-backend`
-- Group memberships: `video` (for camera access)
-- No sudo privileges
-- Restricted filesystem access
-
-### Systemd Security
-
-The service includes security hardening:
-
-- `NoNewPrivileges=true`
-- `ProtectSystem=strict`
-- `ProtectHome=true`
-- `PrivateTmp=true`
-- Resource limits (memory, CPU)
-
-### File Permissions
-
-- Configuration files: `600` (owner read/write only)
-- Application files: `755` (owner read/write/execute, group/other read/execute)
-- Data directories: `775` (group write access for logs/recordings)
-
-## 🛠️ Development
-
-### Project Structure
-
-```
-EZREC-BackEnd/
-├── src/
-│   ├── orchestrator.py          # Main service coordinator
-│   ├── camera_interface.py      # Camera abstraction layer
-│   ├── camera.py                # Recording management
-│   ├── config.py                # Configuration management
-│   ├── utils.py                 # Utility functions
-│   └── find_camera.py           # Camera detection
-├── test_system.py               # Test suite
-├── raspberry_pi_setup.sh        # Installation script
-├── ezrec-backend.service        # Systemd service file
-├── requirements.txt             # Python dependencies
-├── .env.example                 # Configuration template
-└── README.md                    # This file
-```
-
-### Adding Features
-
-1. **Extend Configuration**: Add new settings to `config.py` and `.env.example`
-2. **Add Tests**: Include tests in `test_system.py`
-3. **Update Service**: Modify `orchestrator.py` for new functionality
-4. **Document Changes**: Update this README
-
-### Debugging
-
-Enable debug mode:
+### Camera Settings
 
 ```bash
-# In .env file
-DEBUG=true
-LOG_LEVEL=DEBUG
-
-# Restart service
-ezrec restart
-
-# View debug logs
-ezrec logs
+# Edit /opt/ezrec-backend/.env
+RECORD_WIDTH=1920           # Recording resolution
+RECORD_HEIGHT=1080
+RECORD_FPS=30               # Frames per second
+RECORDING_BITRATE=10000000  # Video quality
 ```
 
-## 🔄 Updates and Maintenance
-
-### Updating the System
+### Performance Tuning
 
 ```bash
-# Pull latest changes and restart
-ezrec update
-
-# Manual update process
-cd /opt/ezrec-backend
-git pull
-sudo -u ezrec ./venv/bin/pip install -r requirements.txt
-sudo systemctl restart ezrec-backend
+DEBUG=false                 # Disable for production
+LOG_LEVEL=INFO             # ERROR, WARN, INFO, DEBUG
+BOOKING_CHECK_INTERVAL=5   # Seconds between booking checks
+STATUS_UPDATE_INTERVAL=10  # Dashboard update frequency
 ```
 
-### Maintenance Tasks
+## 🔄 Multiple Pi Setup
 
-Regular maintenance is automated:
+**Deploy to additional Raspberry Pis:**
 
-- **Log Rotation**: Configured via logrotate
-- **Temp File Cleanup**: Automatic cleanup of old temporary files
-- **System Monitoring**: Continuous health checks
+1. Use unique `CAMERA_ID` for each Pi (e.g., `camera_1`, `camera_2`)
+2. Run the same installation commands
+3. Each Pi operates independently
+4. All cameras appear in the same dashboard
 
-### Backup and Recovery
+## 📊 Architecture
 
-Important files to backup:
+```
+┌─────────────────┐    ┌──────────────┐    ┌─────────────────┐
+│   Dashboard     │    │   Supabase   │    │  Raspberry Pi   │
+│   (Web App)     │◄──►│   Database   │◄──►│   EZREC Backend │
+└─────────────────┘    └──────────────┘    └─────────────────┘
+                                                    │
+                                            ┌───────▼───────┐
+                                            │  Pi Camera /  │
+                                            │  USB Camera   │
+                                            └───────────────┘
+```
 
-- `/opt/ezrec-backend/.env` - Configuration
-- `/opt/ezrec-backend/logs/` - Application logs
-- `/opt/ezrec-backend/recordings/` - Video recordings
-
-## 🐛 Troubleshooting
+## 🛠️ Troubleshooting Guide
 
 ### Common Issues
 
-#### Camera Not Detected
+**Service won't start:**
 
 ```bash
-# Check camera hardware
-ezrec health
-
-# Test camera manually
-libcamera-hello --list-cameras
-
-# Check permissions
-groups ezrec  # Should include 'video'
+sudo journalctl -u ezrec-backend --no-pager
+./verify_installation.sh
 ```
 
-#### Service Won't Start
+**Camera not detected:**
 
 ```bash
-# Check service status
-sudo systemctl status ezrec-backend
-
-# View error logs
-sudo journalctl -u ezrec-backend --since "10 minutes ago"
-
-# Validate configuration
-sudo -u ezrec /opt/ezrec-backend/venv/bin/python src/config.py
+./camera_diagnostic.py
+# Check camera connections and permissions
 ```
 
-#### High CPU/Memory Usage
+**No bookings detected:**
 
 ```bash
-# Check system resources
-ezrec health
-
-# Monitor in real-time
-top -p $(pgrep -f ezrec)
-
-# Check disk space
-df -h
+./debug_camera_bookings.py
+# Verify Supabase connection and camera_id matching
 ```
 
-#### Network Connection Issues
+**Permission errors:**
 
 ```bash
-# Test Supabase connection
-sudo -u ezrec /opt/ezrec-backend/venv/bin/python -c "
-from src.config import SUPABASE_URL
-import requests
-print(requests.get(SUPABASE_URL + '/rest/v1/').status_code)
-"
+sudo ./fix_camera_issues.sh
+# Fixes camera access and WirePlumber conflicts
 ```
 
-### Debug Mode
-
-Enable enhanced logging:
+### Expert Recovery
 
 ```bash
-# Edit configuration
-ezrec config
+# Complete reinstallation
+sudo ./deploy_ezrec.sh
 
-# Set DEBUG=true and LOG_LEVEL=DEBUG
-# Save and restart
-ezrec restart
+# Virtual environment issues
+sudo ./fix_picamera2_venv.sh
 
-# Monitor debug output
-ezrec logs
+# Supabase compatibility
+sudo ./fix_supabase_compatibility.sh
 ```
 
-### Getting Help
+## 📁 Project Structure
 
-1. **Check Logs**: Always start with `ezrec logs` and `ezrec health`
-2. **Run Tests**: Use `test_system.py` to identify issues
-3. **Validate Config**: Ensure `.env` file is properly configured
-4. **Check Hardware**: Verify camera connections and permissions
-
-## 📈 Performance Optimization
-
-### Raspberry Pi Optimization
-
-For optimal performance on Raspberry Pi:
-
-1. **Enable camera interface**: `sudo raspi-config`
-2. **Increase GPU memory split**: `gpu_mem=128` in `/boot/config.txt`
-3. **Use fast SD card**: Class 10 or better
-4. **Ensure adequate power supply**: 5V/3A recommended
-
-### Recording Quality
-
-Adjust recording settings in `.env`:
-
-```bash
-# High quality (higher CPU usage)
-RECORD_WIDTH=1920
-RECORD_HEIGHT=1080
-RECORD_FPS=30
-RECORDING_BITRATE=10000000
-
-# Balanced quality
-RECORD_WIDTH=1280
-RECORD_HEIGHT=720
-RECORD_FPS=24
-RECORDING_BITRATE=5000000
-
-# Low quality (lower CPU usage)
-RECORD_WIDTH=640
-RECORD_HEIGHT=480
-RECORD_FPS=15
-RECORDING_BITRATE=2000000
+```
+EZREC-BackEnd/
+├── 🚀 deploy_ezrec.sh              # One-command installer
+├── 📊 check_recordings.sh          # Status checker
+├── 📸 system_snapshot.sh           # System replication
+├── 🔧 Installation Scripts/
+│   ├── install_ezrec.sh            # Core installation
+│   ├── setup_pi_env.sh             # Pi environment setup
+│   └── create_env_file.sh          # Environment configuration
+├── 🛠️ Diagnostic Tools/
+│   ├── camera_diagnostic.py        # Camera troubleshooting
+│   ├── debug_camera_bookings.py    # Booking detection debug
+│   └── verify_installation.sh      # Full system verification
+├── 🔧 Fix Scripts/
+│   ├── fix_camera_issues.sh        # Camera access fixes
+│   ├── fix_picamera2_venv.sh       # Virtual environment fixes
+│   └── fix_supabase_compatibility.sh # Database compatibility
+├── 📁 src/                         # Core application code
+├── 📁 migrations/                  # Database migrations
+└── 📋 Documentation/
+    ├── README.md                   # This file
+    ├── CAMERA_TROUBLESHOOTING.md   # Camera-specific help
+    └── requirements.txt            # Python dependencies
 ```
 
-## 📄 License
+## 🔗 Related Projects
 
-This project is licensed under the MIT License. See the LICENSE file for details.
+This backend works with:
+
+- **EZREC Dashboard**: Web interface for camera management
+- **EZREC Mobile App**: Mobile control and monitoring
+- **EZREC Analytics**: Recording analysis and highlights
 
 ## 🤝 Contributing
 
 1. Fork the repository
 2. Create a feature branch
 3. Make your changes
-4. Add tests for new functionality
+4. Test thoroughly with `./verify_installation.sh`
 5. Submit a pull request
 
-## 📞 Support
+## 📄 License
 
-For support and questions:
+MIT License - see LICENSE file for details.
 
-- Check the troubleshooting section above
-- Review logs and health check output
-- Create an issue on GitHub with:
-  - System information (`ezrec health`)
-  - Error logs (`ezrec logs`)
-  - Test results (`test_system.py --save-report`)
+## 🆘 Support
+
+- **Issues**: [GitHub Issues](https://github.com/naeimsalib/EZREC-BackEnd/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/naeimsalib/EZREC-BackEnd/discussions)
+- **Documentation**: [CAMERA_TROUBLESHOOTING.md](CAMERA_TROUBLESHOOTING.md)
 
 ---
 
-**Note**: This system is optimized for Raspberry Pi deployment. While it may work on other systems, the installation script and some features are specifically designed for Raspberry Pi OS.
+**Made with ❤️ for the Raspberry Pi community**
+
+_Inspired by projects like [ezbeq](https://ezbeq.readthedocs.io/en/latest/rpi/) that show how powerful automated Pi installations can be._
