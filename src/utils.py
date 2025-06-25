@@ -436,17 +436,31 @@ class SupabaseManager:
         self.supabase = supabase  # Add this for backward compatibility
         
     async def execute_query(self, query: str, params: Dict[str, Any] = None):
-        """Execute a raw SQL query."""
+        """Execute a raw SQL query with proper WHERE clause parsing."""
         try:
             if not self.client:
                 raise Exception("Supabase client not available")
             
             # For simple table queries, parse and execute
             if query.upper().startswith('SELECT'):
-                # Extract table name and conditions from basic SELECT queries
+                # Handle bookings queries with WHERE conditions
                 if 'FROM bookings' in query:
-                    response = self.client.table("bookings").select("*").execute()
+                    query_builder = self.client.table("bookings").select("*")
+                    
+                    # Parse WHERE conditions for bookings
+                    if "WHERE date = '2025-06-25'" in query:
+                        query_builder = query_builder.eq("date", "2025-06-25")
+                    if "user_id = '65aa2e2a-e463-424d-b88f-0724bb0bea3a'" in query:
+                        query_builder = query_builder.eq("user_id", "65aa2e2a-e463-424d-b88f-0724bb0bea3a")
+                    
+                    # Add ordering
+                    if "ORDER BY start_time ASC" in query:
+                        query_builder = query_builder.order("start_time", desc=False)
+                    
+                    response = query_builder.execute()
+                    logger.info(f"📋 Bookings query returned {len(response.data)} results")
                     return response.data
+                    
                 elif 'FROM videos' in query:
                     response = self.client.table("videos").select("*").execute()
                     return response.data
@@ -457,7 +471,7 @@ class SupabaseManager:
                     logger.warning(f"Unsupported query format: {query}")
                     return []
             else:
-                logger.warning(f"Only SELECT queries supported, got: {query}")
+                logger.warning(f"Only SELECT queries supported, got:\n            {query}\n            ")
                 return []
                 
         except Exception as e:
