@@ -278,13 +278,19 @@ class EZRECOrchestrator:
                             self.logger.info(f"   Video ID: {upload_result.get('video_id')}")
                             self.logger.info(f"   Table: {upload_result.get('table', 'videos')}")
                             
-                            # Optionally delete local file after successful upload
-                            if os.getenv("DELETE_AFTER_UPLOAD", "false").lower() == "true":
-                                try:
-                                    os.remove(final_path)
-                                    self.logger.info(f"🗑️ Deleted local file: {os.path.basename(final_path)}")
-                                except Exception as e:
-                                    self.logger.warning(f"⚠️ Could not delete local file: {e}")
+                            # FIXED: Complete booking in database
+                            self.logger.info("📝 Completing booking in database...")
+                            if complete_booking(booking_id):
+                                self.logger.info(f"✅ Booking {booking_id} completed successfully")
+                            else:
+                                self.logger.warning(f"⚠️ Failed to complete booking {booking_id}")
+                            
+                            # FIXED: Always delete local file after successful upload
+                            try:
+                                os.remove(final_path)
+                                self.logger.info(f"🗑️ Deleted local file: {os.path.basename(final_path)}")
+                            except Exception as e:
+                                self.logger.warning(f"⚠️ Could not delete local file: {e}")
                         else:
                             self.logger.warning(f"⚠️ Video upload failed: {upload_result.get('error')}")
                             self.logger.info(f"📁 Video saved locally: {final_path}")

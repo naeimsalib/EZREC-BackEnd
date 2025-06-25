@@ -89,10 +89,10 @@ MAX_RECORDING_DURATION = get_env_var("MAX_RECORDING_DURATION", 7200, var_type=in
 MIN_RECORDING_DURATION = get_env_var("MIN_RECORDING_DURATION", 300, var_type=int)   # 5 minutes
 RECORDING_BITRATE = get_env_var("RECORDING_BITRATE", 10000000, var_type=int)        # 10Mbps
 
-# System Update Intervals
-STATUS_UPDATE_INTERVAL = get_env_var("STATUS_UPDATE_INTERVAL", 15, var_type=int)
-BOOKING_CHECK_INTERVAL = get_env_var("BOOKING_CHECK_INTERVAL", 60, var_type=int)
-HEARTBEAT_INTERVAL = get_env_var("HEARTBEAT_INTERVAL", 30, var_type=int)
+# System Update Intervals - FIXED: Faster updates for real-time monitoring
+STATUS_UPDATE_INTERVAL = get_env_var("STATUS_UPDATE_INTERVAL", 3, var_type=int)  # 3 seconds
+BOOKING_CHECK_INTERVAL = get_env_var("BOOKING_CHECK_INTERVAL", 5, var_type=int)   # 5 seconds  
+HEARTBEAT_INTERVAL = get_env_var("HEARTBEAT_INTERVAL", 3, var_type=int)           # 3 seconds
 
 # Asset Paths
 LOGO_PATH = get_env_var("LOGO_PATH", str(ASSETS_DIR / "logo.png"))

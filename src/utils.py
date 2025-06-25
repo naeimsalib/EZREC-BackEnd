@@ -384,20 +384,20 @@ def load_booking() -> Optional[Dict[str, Any]]:
         return None
 
 def complete_booking(booking_id: str) -> bool:
-    """FIXED: Complete a booking by updating database status."""
+    """FIXED: Complete a booking by removing it from database after recording."""
     try:
         if not supabase:
             logger.warning("Supabase client not available for booking completion")
             return False
         
-        # Update booking status to completed
+        # FIXED: Delete booking from database (removes from bookings table)
         response = supabase.table("bookings")\
-            .update({"status": "completed"})\
+            .delete()\
             .eq("id", booking_id)\
             .execute()
         
-        if response.data:
-            logger.info(f"✅ Booking {booking_id} marked as completed")
+        if response.data is not None:  # DELETE returns empty list on success
+            logger.info(f"✅ Booking {booking_id} removed from database")
             
             # Remove local booking file
             try:
@@ -410,7 +410,7 @@ def complete_booking(booking_id: str) -> bool:
             
             return True
         else:
-            logger.warning(f"⚠️ Failed to mark booking {booking_id} as completed")
+            logger.warning(f"⚠️ Failed to remove booking {booking_id} from database")
             return False
             
     except Exception as e:
