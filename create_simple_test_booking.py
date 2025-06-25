@@ -61,7 +61,7 @@ def create_simple_test_booking():
         if response.data:
             print("✅ Test booking created successfully!")
             print(f"⏳ Recording will start in 2 minutes at {start_time.strftime('%H:%M:%S')}")
-            print(f"📽️  Expected filename: recording_{start_time.strftime('%Y%m%d_%H%M%S')}_{booking_id}.mp4")
+            print(f"📽️  Expected filename: rec_{booking_id}_{start_time.strftime('%Y%m%d_%H%M%S')}.mp4")
             print("\n📊 Monitor the recording:")
             print("sudo journalctl -u ezrec-backend -f")
             print("\n📂 Check recordings after completion:")
