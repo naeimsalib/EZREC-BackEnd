@@ -149,3 +149,27 @@ test_*.py
 *.key
 *.pem
 secrets.txt
+
+# Environment files
+.env
+.env.*
+
+# Security files
+*.key
+*.pem
+secrets.txt
+
+# History and temporary files that might contain sensitive data
+.history/
+.DS_Store
+*.tmp
+*.backup
+*.log
+*_backup*
+*_old*
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
