@@ -145,3 +145,7 @@ test_*.py
 
 # Pi runtime folders
 /home/michomanoly14892/code/SmartCam-Soccer/backend/ 
+# Security files
+*.key
+*.pem
+secrets.txt
