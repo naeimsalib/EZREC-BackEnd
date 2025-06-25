@@ -1,402 +1,613 @@
 #!/usr/bin/env python3
 """
-EZREC Backend Orchestrator - FIXED VERSION
-Main orchestration module that coordinates booking detection, recording, and upload
-with corrected database connections and video upload functionality
+🎬 EZREC Orchestrator - Complete Booking Lifecycle Manager
+Handles: Bookings → Recording → Upload → Cleanup
+Optimized for Raspberry Pi with Picamera2 and 3-second status updates
 """
-import time
-import threading
-import queue
+
 import os
 import sys
+import time
+import logging
+import asyncio
+import threading
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any
-import signal
+from typing import Dict, List, Optional, Any, Tuple
+import json
+from pathlib import Path
 
-# Add the src directory to Python path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# Add project root to path
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, project_root)
 
-from utils_fixed import (
-    setup_logging, logger, get_next_booking, upload_video_to_supabase,
-    update_system_status, save_booking, load_booking, complete_booking
-)
-from camera_interface import CameraInterface
-from config import (
-    BOOKING_CHECK_INTERVAL, STATUS_UPDATE_INTERVAL, HEARTBEAT_INTERVAL,
-    USER_ID, CAMERA_ID, RECORDING_DIR
-)
+from src.config import Config
+from src.camera_interface import get_camera_instance, cleanup_camera_instance
+from src.utils import SupabaseManager
 
 class EZRECOrchestrator:
     """
-    FIXED EZREC Backend Orchestrator with corrected database connections
+    🎬 EZREC Main Orchestrator - Complete Booking Management
+    
+    Workflow:
+    1. Reads bookings from Supabase (start/end times)
+    2. Starts recording at booking start time
+    3. Updates status every 3 seconds during recording
+    4. Stops recording at booking end time
+    5. Removes booking from bookings table
+    6. Uploads video to videos table + storage bucket
+    7. Removes local file after confirmed upload
+    8. Updates all system status every 3 seconds
     """
     
     def __init__(self):
-        """Initialize the orchestrator with fixed configuration."""
-        self.logger = setup_logging()
-        self.logger.info("=" * 60)
-        self.logger.info("🚀 EZREC Orchestrator Starting - FIXED VERSION")
-        self.logger.info("=" * 60)
+        """Initialize EZREC Orchestrator"""
+        self.config = Config()
+        self.is_running = False
+        self.current_booking: Optional[Dict] = None
+        self.recording_active = False
+        self.status_update_thread: Optional[threading.Thread] = None
+        self.booking_monitor_thread: Optional[threading.Thread] = None
+        self.stop_event = threading.Event()
         
-        # Core state
-        self.running = False
-        self.recording = False
-        self.current_booking = None
+        # Directories
+        self.recordings_dir = Path("/opt/ezrec-backend/recordings")
+        self.temp_dir = Path("/opt/ezrec-backend/temp")
+        self.logs_dir = Path("/opt/ezrec-backend/logs")
         
-        # Threading infrastructure
-        self.shutdown_event = threading.Event()
-        self.booking_queue = queue.Queue()
+        # Ensure directories exist
+        for directory in [self.recordings_dir, self.temp_dir, self.logs_dir]:
+            directory.mkdir(parents=True, exist_ok=True)
         
-        # Thread references
-        self.booking_thread = None
-        self.recording_thread = None
-        self.status_thread = None
-        self.heartbeat_thread = None
+        # Setup logging
+        self.setup_logging()
         
-        # Recording management
-        self.recording_errors = 0
+        # Initialize components
+        self.db = SupabaseManager()
+        self.camera = get_camera_instance("pi_camera_1")
         
-        # Camera interface
-        self.camera = None
-        self._init_camera()
+        # System status
+        self.system_status = {
+            "orchestrator_status": "initializing",
+            "camera_status": "unknown",
+            "current_booking": None,
+            "recording_active": False,
+            "last_update": datetime.now().isoformat(),
+            "uptime_start": datetime.now().isoformat(),
+            "total_recordings": 0,
+            "successful_uploads": 0,
+            "errors_count": 0
+        }
         
-        # Signal handling
-        signal.signal(signal.SIGTERM, self._signal_handler)
-        signal.signal(signal.SIGINT, self._signal_handler)
-        
-        self.logger.info(f"📊 Configuration:")
-        self.logger.info(f"   User ID: {USER_ID}")
-        self.logger.info(f"   Camera ID: {CAMERA_ID}")
-        self.logger.info(f"   Booking Check Interval: {BOOKING_CHECK_INTERVAL}s")
-        self.logger.info(f"   Status Update Interval: {STATUS_UPDATE_INTERVAL}s")
-        self.logger.info("=" * 60)
+        self.logger.info("🎬 EZREC Orchestrator initialized")
     
-    def _init_camera(self):
-        """Initialize camera interface with error handling."""
+    def setup_logging(self):
+        """Setup comprehensive logging"""
+        log_file = self.logs_dir / f"ezrec_orchestrator_{datetime.now().strftime('%Y%m%d')}.log"
+        
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            handlers=[
+                logging.FileHandler(log_file),
+                logging.StreamHandler(sys.stdout)
+            ]
+        )
+        
+        self.logger = logging.getLogger("EZREC.Orchestrator")
+    
+    async def start_orchestrator(self):
+        """Start the main orchestrator process"""
         try:
-            self.camera = CameraInterface()
-            self.logger.info("✅ Camera interface initialized")
-        except Exception as e:
-            self.logger.error(f"❌ Camera initialization failed: {e}")
-            self.camera = None
-    
-    def _signal_handler(self, signum, frame):
-        """Handle shutdown signals gracefully."""
-        self.logger.info(f"🛑 Received signal {signum}, shutting down...")
-        self.stop()
-    
-    def start(self):
-        """Start all orchestrator threads with fixed booking detection."""
-        if self.running:
-            self.logger.warning("⚠️ Orchestrator already running")
-            return
-        
-        self.running = True
-        self.shutdown_event.clear()
-        
-        self.logger.info("🚀 Starting EZREC Orchestrator threads...")
-        
-        try:
-            # Start booking monitoring thread (FIXED)
-            self.booking_thread = threading.Thread(
-                target=self._booking_monitor_loop,
-                name="BookingMonitor",
-                daemon=True
-            )
-            self.booking_thread.start()
-            self.logger.info("✅ Booking monitor thread started")
+            self.logger.info("🚀 Starting EZREC Orchestrator...")
+            self.is_running = True
+            self.stop_event.clear()
             
-            # Start recording management thread
-            self.recording_thread = threading.Thread(
-                target=self._recording_loop,
-                name="RecordingManager",
-                daemon=True
-            )
-            self.recording_thread.start()
-            self.logger.info("✅ Recording manager thread started")
+            # Update initial system status
+            await self.update_system_status("running")
             
-            # Start system status update thread (FIXED)
-            self.status_thread = threading.Thread(
-                target=self._status_update_loop,
-                name="StatusUpdater",
-                daemon=True
-            )
-            self.status_thread.start()
-            self.logger.info("✅ Status updater thread started")
+            # Start background threads
+            self.start_background_threads()
             
-            # Start heartbeat thread
-            self.heartbeat_thread = threading.Thread(
-                target=self._heartbeat_loop,
-                name="Heartbeat",
-                daemon=True
-            )
-            self.heartbeat_thread.start()
-            self.logger.info("✅ Heartbeat thread started")
-            
-            self.logger.info("🎯 All threads started successfully")
-            self.logger.info("🔍 Monitoring for bookings...")
+            # Main orchestrator loop
+            await self.main_orchestrator_loop()
             
         except Exception as e:
-            self.logger.error(f"❌ Error starting threads: {e}")
-            self.stop()
+            self.logger.error(f"❌ Orchestrator startup failed: {e}")
+            await self.update_system_status("error", str(e))
+            raise
     
-    def _booking_monitor_loop(self):
-        """
-        FIXED: Monitor for new bookings with proper database queries.
-        """
-        self.logger.info("🔍 Booking monitor started")
+    def start_background_threads(self):
+        """Start background monitoring threads"""
+        # Status update thread (every 3 seconds)
+        self.status_update_thread = threading.Thread(
+            target=self.status_update_loop, 
+            name="StatusUpdater",
+            daemon=True
+        )
+        self.status_update_thread.start()
         
-        while not self.shutdown_event.is_set():
+        # Booking monitor thread
+        self.booking_monitor_thread = threading.Thread(
+            target=self.booking_monitor_loop,
+            name="BookingMonitor", 
+            daemon=True
+        )
+        self.booking_monitor_thread.start()
+        
+        self.logger.info("✅ Background threads started")
+    
+    async def main_orchestrator_loop(self):
+        """Main orchestration loop"""
+        self.logger.info("🔄 Starting main orchestrator loop...")
+        
+        while self.is_running and not self.stop_event.is_set():
             try:
-                # FIXED: Use corrected booking detection
-                booking = get_next_booking()
+                # Check for active bookings
+                active_bookings = await self.get_active_bookings()
                 
-                if booking:
-                    if not self.current_booking or booking['id'] != self.current_booking.get('id'):
-                        self.logger.info(f"📋 New booking detected: {booking['id']}")
-                        self.logger.info(f"   Date: {booking['date']}")
-                        self.logger.info(f"   Time: {booking['start_time']} - {booking['end_time']}")
-                        self.logger.info(f"   User: {booking['user_id']}")
-                        
-                        # Queue the booking for processing
-                        self.booking_queue.put(booking)
-                        save_booking(booking)
-                        self.current_booking = booking
-                else:
-                    if self.current_booking:
-                        self.logger.debug("📭 No active bookings")
-                        self.current_booking = None
+                if active_bookings:
+                    for booking in active_bookings:
+                        await self.process_booking(booking)
                 
-                # Wait before next check
-                self.shutdown_event.wait(BOOKING_CHECK_INTERVAL)
+                # Process any scheduled bookings
+                upcoming_bookings = await self.get_upcoming_bookings()
+                
+                for booking in upcoming_bookings:
+                    if self.should_start_recording(booking):
+                        await self.start_booking_recording(booking)
+                
+                # Check if current recording should stop
+                if self.current_booking and self.recording_active:
+                    if self.should_stop_recording(self.current_booking):
+                        await self.stop_booking_recording()
+                
+                # Brief pause to prevent excessive CPU usage
+                await asyncio.sleep(1)
                 
             except Exception as e:
-                self.logger.error(f"❌ Error in booking monitor: {e}")
-                self.shutdown_event.wait(BOOKING_CHECK_INTERVAL)
+                self.logger.error(f"❌ Error in main orchestrator loop: {e}")
+                self.system_status["errors_count"] += 1
+                await asyncio.sleep(5)  # Longer pause on error
     
-    def _recording_loop(self):
-        """Handle recording scheduling and execution with FIXED upload."""
-        self.logger.info("📹 Recording manager started")
-        
-        while not self.shutdown_event.is_set():
-            try:
-                # Check for new bookings
-                try:
-                    booking = self.booking_queue.get(timeout=1.0)
-                    self.logger.info(f"📋 Processing booking: {booking['id']}")
-                    
-                    # Schedule recording
-                    success = self._schedule_and_record(booking)
-                    
-                    if success:
-                        self.logger.info(f"✅ Booking {booking['id']} completed successfully")
-                        complete_booking(booking['id'])
-                    else:
-                        self.logger.error(f"❌ Booking {booking['id']} failed")
-                        self.recording_errors += 1
-                        
-                except queue.Empty:
-                    continue
-                    
-            except Exception as e:
-                self.logger.error(f"❌ Error in recording loop: {e}")
-                self.recording_errors += 1
-    
-    def _schedule_and_record(self, booking: Dict[str, Any]) -> bool:
-        """
-        Schedule and execute recording for a booking with FIXED upload.
-        """
+    async def get_active_bookings(self) -> List[Dict]:
+        """Get currently active bookings"""
         try:
-            booking_date = booking['date']
-            start_time = booking['start_time']
-            end_time = booking['end_time']
-            booking_id = booking['id']
-            
-            # Parse times
-            start_datetime = datetime.strptime(f"{booking_date} {start_time}", "%Y-%m-%d %H:%M")
-            end_datetime = datetime.strptime(f"{booking_date} {end_time}", "%Y-%m-%d %H:%M")
-            
             now = datetime.now()
             
-            # Wait until start time
-            if start_datetime > now:
-                wait_seconds = (start_datetime - now).total_seconds()
-                self.logger.info(f"⏰ Waiting {wait_seconds:.0f} seconds until recording start...")
-                
-                if self.shutdown_event.wait(wait_seconds):
-                    return False  # Shutdown requested
+            # Query for bookings that are currently active
+            query = f"""
+            SELECT * FROM bookings 
+            WHERE date = '{now.date()}' 
+            AND start_time <= '{now.time()}' 
+            AND end_time > '{now.time()}'
+            ORDER BY start_time ASC
+            """
             
-            # Calculate recording duration
-            duration_seconds = (end_datetime - start_datetime).total_seconds()
-            self.logger.info(f"🎬 Starting recording for {duration_seconds:.0f} seconds")
+            result = await self.db.execute_query(query)
+            return result.get('data', []) if result['success'] else []
             
-            # Start recording
-            if not self.camera:
-                self.logger.error("❌ Camera not available for recording")
-                return False
-            
-            self.recording = True
-            
-            # Generate filename with booking ID
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"rec_{booking_id}_{timestamp}.mp4"
-            video_path = os.path.join(RECORDING_DIR, filename)
-            
-            # Ensure recording directory exists
-            os.makedirs(RECORDING_DIR, exist_ok=True)
-            
-            try:
-                # Record video
-                self.logger.info(f"📹 Recording to: {video_path}")
-                success = self.camera.record_video(video_path, duration_seconds)
-                
-                if success and os.path.exists(video_path):
-                    self.logger.info(f"✅ Recording completed: {filename}")
-                    
-                    # FIXED: Upload to Supabase Storage and videos table
-                    self.logger.info("📤 Uploading video to Supabase...")
-                    upload_result = upload_video_to_supabase(video_path, booking_id)
-                    
-                    if upload_result.get('success'):
-                        self.logger.info(f"✅ Video uploaded successfully")
-                        self.logger.info(f"   Storage Path: {upload_result.get('storage_path')}")
-                        self.logger.info(f"   Video ID: {upload_result.get('video_id')}")
-                        self.logger.info(f"   Table: {upload_result.get('table', 'videos')}")
-                        
-                        # Optionally delete local file after successful upload
-                        if os.getenv("DELETE_AFTER_UPLOAD", "false").lower() == "true":
-                            try:
-                                os.remove(video_path)
-                                self.logger.info(f"🗑️ Deleted local file: {filename}")
-                            except Exception as e:
-                                self.logger.warning(f"⚠️ Could not delete local file: {e}")
-                    else:
-                        self.logger.warning(f"⚠️ Video upload failed: {upload_result.get('error')}")
-                        self.logger.info(f"📁 Video saved locally: {video_path}")
-                    
-                    return True
-                else:
-                    self.logger.error(f"❌ Recording failed or file not created")
-                    return False
-                    
-            finally:
-                self.recording = False
-                
         except Exception as e:
-            self.logger.error(f"❌ Error in recording: {e}")
-            self.recording = False
+            self.logger.error(f"❌ Failed to get active bookings: {e}")
+            return []
+    
+    async def get_upcoming_bookings(self) -> List[Dict]:
+        """Get upcoming bookings that should start soon"""
+        try:
+            now = datetime.now()
+            soon = now + timedelta(minutes=1)  # Look ahead 1 minute
+            
+            query = f"""
+            SELECT * FROM bookings 
+            WHERE date = '{now.date()}' 
+            AND start_time > '{now.time()}' 
+            AND start_time <= '{soon.time()}'
+            ORDER BY start_time ASC
+            """
+            
+            result = await self.db.execute_query(query)
+            return result.get('data', []) if result['success'] else []
+            
+        except Exception as e:
+            self.logger.error(f"❌ Failed to get upcoming bookings: {e}")
+            return []
+    
+    def should_start_recording(self, booking: Dict) -> bool:
+        """Check if recording should start for a booking"""
+        try:
+            now = datetime.now()
+            booking_date = datetime.strptime(booking['date'], '%Y-%m-%d').date()
+            booking_start = datetime.strptime(booking['start_time'], '%H:%M:%S').time()
+            
+            booking_start_datetime = datetime.combine(booking_date, booking_start)
+            
+            # Start recording if it's time (within 30 seconds)
+            time_diff = (booking_start_datetime - now).total_seconds()
+            return -30 <= time_diff <= 30 and not self.recording_active
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error checking recording start: {e}")
             return False
     
-    def _status_update_loop(self):
-        """
-        FIXED: Update system status with proper database connection.
-        """
-        self.logger.info("📊 Status updater started")
-        
-        while not self.shutdown_event.is_set():
-            try:
-                # FIXED: Use corrected status update function
-                update_system_status(
-                    is_recording=self.recording,
-                    recording_errors=self.recording_errors,
-                    current_booking_id=self.current_booking['id'] if self.current_booking else None
-                )
-                
-                self.shutdown_event.wait(STATUS_UPDATE_INTERVAL)
-                
-            except Exception as e:
-                self.logger.error(f"❌ Error updating status: {e}")
-                self.shutdown_event.wait(STATUS_UPDATE_INTERVAL)
-    
-    def _heartbeat_loop(self):
-        """Send periodic heartbeat signals."""
-        self.logger.info("💓 Heartbeat thread started")
-        
-        while not self.shutdown_event.is_set():
-            try:
-                # Send heartbeat
-                update_system_status(last_heartbeat=datetime.now().isoformat())
-                self.logger.debug("💓 Heartbeat sent")
-                
-                self.shutdown_event.wait(HEARTBEAT_INTERVAL)
-                
-            except Exception as e:
-                self.logger.error(f"❌ Error in heartbeat: {e}")
-                self.shutdown_event.wait(HEARTBEAT_INTERVAL)
-    
-    def stop(self):
-        """Stop all threads gracefully."""
-        if not self.running:
-            return
-        
-        self.logger.info("🛑 Stopping EZREC Orchestrator...")
-        
-        self.running = False
-        self.shutdown_event.set()
-        
-        # Stop recording if active
-        if self.recording and self.camera:
-            try:
-                self.camera.stop_recording()
-                self.recording = False
-                self.logger.info("🛑 Recording stopped")
-            except Exception as e:
-                self.logger.error(f"❌ Error stopping recording: {e}")
-        
-        # Wait for threads to finish
-        threads = [
-            ('Booking Monitor', self.booking_thread),
-            ('Recording Manager', self.recording_thread),
-            ('Status Updater', self.status_thread),
-            ('Heartbeat', self.heartbeat_thread)
-        ]
-        
-        for name, thread in threads:
-            if thread and thread.is_alive():
-                try:
-                    thread.join(timeout=5.0)
-                    if thread.is_alive():
-                        self.logger.warning(f"⚠️ {name} thread did not stop gracefully")
-                    else:
-                        self.logger.info(f"✅ {name} thread stopped")
-                except Exception as e:
-                    self.logger.error(f"❌ Error stopping {name} thread: {e}")
-        
-        # Final status update
+    def should_stop_recording(self, booking: Dict) -> bool:
+        """Check if recording should stop for current booking"""
         try:
-            update_system_status(is_recording=False, pi_active=False)
-            self.logger.info("📊 Final status update sent")
-        except Exception as e:
-            self.logger.error(f"❌ Error sending final status: {e}")
-        
-        self.logger.info("🛑 EZREC Orchestrator stopped")
-    
-    def run(self):
-        """Main run loop."""
-        try:
-            self.start()
+            now = datetime.now()
+            booking_date = datetime.strptime(booking['date'], '%Y-%m-%d').date()
+            booking_end = datetime.strptime(booking['end_time'], '%H:%M:%S').time()
             
-            # Keep main thread alive
-            while self.running:
-                time.sleep(1)
-                
-        except KeyboardInterrupt:
-            self.logger.info("⌨️ Keyboard interrupt received")
+            booking_end_datetime = datetime.combine(booking_date, booking_end)
+            
+            # Stop recording if end time has passed
+            return now >= booking_end_datetime
+            
         except Exception as e:
-            self.logger.error(f"❌ Fatal error: {e}")
-        finally:
-            self.stop()
-
-def main():
-    """Main entry point."""
-    try:
-        orchestrator = EZRECOrchestrator()
-        orchestrator.run()
-    except Exception as e:
-        logger.error(f"❌ Failed to start orchestrator: {e}")
-        return 1
+            self.logger.error(f"❌ Error checking recording stop: {e}")
+            return True  # Stop on error to be safe
     
-    return 0
+    async def start_booking_recording(self, booking: Dict):
+        """Start recording for a booking"""
+        try:
+            self.logger.info(f"🎬 Starting recording for booking {booking['id']}")
+            
+            # Set current booking
+            self.current_booking = booking
+            
+            # Generate recording filename
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"booking_{booking['id']}_{timestamp}.mp4"
+            recording_path = self.recordings_dir / filename
+            
+            # Start camera recording
+            success = self.camera.start_recording(booking['id'], str(recording_path))
+            
+            if success:
+                self.recording_active = True
+                self.system_status["recording_active"] = True
+                self.system_status["current_booking"] = booking['id']
+                
+                # Create recording entry in database
+                await self.create_recording_entry(booking, str(recording_path))
+                
+                self.logger.info(f"✅ Recording started successfully: {filename}")
+            else:
+                self.logger.error(f"❌ Failed to start camera recording for booking {booking['id']}")
+                await self.handle_recording_error(booking, "Camera start failed")
+                
+        except Exception as e:
+            self.logger.error(f"❌ Error starting booking recording: {e}")
+            await self.handle_recording_error(booking, str(e))
+    
+    async def stop_booking_recording(self):
+        """Stop current booking recording and process video"""
+        try:
+            if not self.current_booking or not self.recording_active:
+                return
+            
+            booking = self.current_booking
+            self.logger.info(f"🛑 Stopping recording for booking {booking['id']}")
+            
+            # Stop camera recording
+            success, recording_path = self.camera.stop_recording()
+            
+            if success and recording_path:
+                self.logger.info(f"✅ Recording stopped: {recording_path}")
+                
+                # Process the completed recording
+                await self.process_completed_recording(booking, recording_path)
+                
+            else:
+                self.logger.error(f"❌ Failed to stop recording for booking {booking['id']}")
+                
+            # Clear current booking state
+            self.recording_active = False
+            self.system_status["recording_active"] = False
+            self.system_status["current_booking"] = None
+            self.current_booking = None
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error stopping booking recording: {e}")
+            self.recording_active = False
+            self.current_booking = None
+    
+    async def process_completed_recording(self, booking: Dict, recording_path: str):
+        """Process completed recording through full lifecycle"""
+        try:
+            self.logger.info(f"📹 Processing completed recording for booking {booking['id']}")
+            
+            # Verify recording file exists and has content
+            if not os.path.exists(recording_path) or os.path.getsize(recording_path) == 0:
+                self.logger.error(f"❌ Recording file missing or empty: {recording_path}")
+                return
+            
+            file_size = os.path.getsize(recording_path)
+            self.logger.info(f"📊 Recording file size: {file_size} bytes")
+            
+            # Step 1: Remove booking from bookings table
+            await self.remove_booking(booking['id'])
+            
+            # Step 2: Upload video to storage and create video entry
+            upload_success = await self.upload_video_to_storage(booking, recording_path)
+            
+            if upload_success:
+                # Step 3: Remove local file after confirmed upload
+                await self.cleanup_local_recording(recording_path)
+                self.system_status["successful_uploads"] += 1
+                self.system_status["total_recordings"] += 1
+                
+                self.logger.info(f"✅ Successfully processed recording for booking {booking['id']}")
+            else:
+                self.logger.error(f"❌ Failed to upload recording for booking {booking['id']}")
+                self.system_status["errors_count"] += 1
+                
+        except Exception as e:
+            self.logger.error(f"❌ Error processing completed recording: {e}")
+            self.system_status["errors_count"] += 1
+    
+    async def create_recording_entry(self, booking: Dict, recording_path: str):
+        """Create recording entry in database"""
+        try:
+            recording_data = {
+                "booking_id": booking['id'],
+                "camera_id": booking.get('camera_id', 'pi_camera_1'),
+                "user_id": booking['user_id'],
+                "file_path": recording_path,
+                "start_time": datetime.now().isoformat(),
+                "status": "recording",
+                "file_size": 0  # Will be updated when recording completes
+            }
+            
+            result = await self.db.create_record("recordings", recording_data)
+            if result['success']:
+                self.logger.info(f"✅ Recording entry created: {result['data']['id']}")
+            else:
+                self.logger.error(f"❌ Failed to create recording entry: {result['error']}")
+                
+        except Exception as e:
+            self.logger.error(f"❌ Error creating recording entry: {e}")
+    
+    async def remove_booking(self, booking_id: str):
+        """Remove booking from bookings table"""
+        try:
+            result = await self.db.delete_record("bookings", booking_id)
+            if result['success']:
+                self.logger.info(f"✅ Booking {booking_id} removed from bookings table")
+            else:
+                self.logger.error(f"❌ Failed to remove booking {booking_id}: {result['error']}")
+                
+        except Exception as e:
+            self.logger.error(f"❌ Error removing booking: {e}")
+    
+    async def upload_video_to_storage(self, booking: Dict, recording_path: str) -> bool:
+        """Upload video to Supabase storage and create video entry"""
+        try:
+            self.logger.info(f"⬆️  Uploading video to storage: {recording_path}")
+            
+            # Generate storage path
+            filename = os.path.basename(recording_path)
+            storage_path = f"recordings/{booking['user_id']}/{filename}"
+            
+            # Upload to storage bucket
+            upload_result = await self.db.upload_file_to_storage(
+                bucket_name="videos",
+                file_path=recording_path,
+                storage_path=storage_path
+            )
+            
+            if not upload_result['success']:
+                self.logger.error(f"❌ Storage upload failed: {upload_result['error']}")
+                return False
+            
+            storage_url = upload_result.get('public_url')
+            self.logger.info(f"✅ Video uploaded to storage: {storage_url}")
+            
+            # Create video entry in videos table
+            video_data = {
+                "booking_id": booking['id'],
+                "user_id": booking['user_id'],
+                "camera_id": booking.get('camera_id', 'pi_camera_1'),
+                "title": f"Recording - {booking.get('title', 'Untitled')}",
+                "description": f"Recorded on {booking['date']} from {booking['start_time']} to {booking['end_time']}",
+                "file_url": storage_url,
+                "file_size": os.path.getsize(recording_path),
+                "duration": await self.get_video_duration(recording_path),
+                "recorded_at": datetime.now().isoformat(),
+                "status": "completed"
+            }
+            
+            video_result = await self.db.create_record("videos", video_data)
+            if video_result['success']:
+                self.logger.info(f"✅ Video entry created: {video_result['data']['id']}")
+                return True
+            else:
+                self.logger.error(f"❌ Failed to create video entry: {video_result['error']}")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"❌ Error uploading video: {e}")
+            return False
+    
+    async def get_video_duration(self, video_path: str) -> Optional[float]:
+        """Get video duration in seconds"""
+        try:
+            # Try to get duration using ffprobe if available
+            import subprocess
+            result = subprocess.run([
+                'ffprobe', '-v', 'quiet', '-show_entries', 'format=duration',
+                '-of', 'default=noprint_wrappers=1:nokey=1', video_path
+            ], capture_output=True, text=True, timeout=10)
+            
+            if result.returncode == 0:
+                duration = float(result.stdout.strip())
+                return duration
+            else:
+                return None
+                
+        except Exception:
+            # Fallback: estimate based on file timestamps if ffprobe not available
+            return None
+    
+    async def cleanup_local_recording(self, recording_path: str):
+        """Remove local recording file after successful upload"""
+        try:
+            if os.path.exists(recording_path):
+                os.remove(recording_path)
+                self.logger.info(f"🧹 Local recording file removed: {recording_path}")
+            else:
+                self.logger.warning(f"⚠️  Local recording file not found: {recording_path}")
+                
+        except Exception as e:
+            self.logger.error(f"❌ Error removing local recording file: {e}")
+    
+    async def handle_recording_error(self, booking: Dict, error_msg: str):
+        """Handle recording errors"""
+        try:
+            self.logger.error(f"❌ Recording error for booking {booking['id']}: {error_msg}")
+            
+            # Update booking status to error
+            await self.db.update_record("bookings", booking['id'], {
+                "status": "error",
+                "error_message": error_msg
+            })
+            
+            self.system_status["errors_count"] += 1
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error handling recording error: {e}")
+    
+    def status_update_loop(self):
+        """Background thread for status updates every 3 seconds"""
+        self.logger.info("📊 Starting status update loop (3-second interval)")
+        
+        while self.is_running and not self.stop_event.is_set():
+            try:
+                # Update system status in database
+                asyncio.run(self.update_system_status_in_db())
+                
+                # Update camera status
+                self.update_camera_status()
+                
+                # Sleep for 3 seconds
+                self.stop_event.wait(3)
+                
+            except Exception as e:
+                self.logger.error(f"❌ Error in status update loop: {e}")
+                time.sleep(3)
+    
+    def booking_monitor_loop(self):
+        """Background thread for monitoring booking changes"""
+        self.logger.info("📅 Starting booking monitor loop")
+        
+        while self.is_running and not self.stop_event.is_set():
+            try:
+                # This could be expanded to listen for real-time booking changes
+                # For now, just ensure we're checking regularly
+                self.stop_event.wait(10)  # Check every 10 seconds
+                
+            except Exception as e:
+                self.logger.error(f"❌ Error in booking monitor loop: {e}")
+                time.sleep(10)
+    
+    async def update_system_status(self, status: str, error: Optional[str] = None):
+        """Update orchestrator system status"""
+        self.system_status.update({
+            "orchestrator_status": status,
+            "last_update": datetime.now().isoformat(),
+            "error": error
+        })
+    
+    async def update_system_status_in_db(self):
+        """Update system status in database"""
+        try:
+            # Get camera status
+            camera_status = self.camera.get_status() if self.camera.is_available() else {"status": "unavailable"}
+            
+            # Prepare status data
+            status_data = {
+                **self.system_status,
+                "camera_status": camera_status,
+                "updated_at": datetime.now().isoformat()
+            }
+            
+            # Update in database
+            await self.db.upsert_system_status("orchestrator", status_data)
+            
+        except Exception as e:
+            self.logger.error(f"❌ Failed to update system status in DB: {e}")
+    
+    def update_camera_status(self):
+        """Update camera status in system status"""
+        try:
+            if self.camera.is_available():
+                camera_status = self.camera.get_status()
+                self.system_status["camera_status"] = camera_status.get("status", "unknown")
+            else:
+                self.system_status["camera_status"] = "unavailable"
+                
+        except Exception as e:
+            self.logger.error(f"❌ Error updating camera status: {e}")
+            self.system_status["camera_status"] = "error"
+    
+    async def process_booking(self, booking: Dict):
+        """Process an individual booking"""
+        # This method can be expanded for more complex booking processing
+        pass
+    
+    async def stop_orchestrator(self):
+        """Stop the orchestrator gracefully"""
+        try:
+            self.logger.info("🛑 Stopping EZREC Orchestrator...")
+            self.is_running = False
+            self.stop_event.set()
+            
+            # Stop any active recording
+            if self.recording_active:
+                await self.stop_booking_recording()
+            
+            # Update system status
+            await self.update_system_status("stopped")
+            
+            # Cleanup camera
+            cleanup_camera_instance()
+            
+            self.logger.info("✅ EZREC Orchestrator stopped")
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error stopping orchestrator: {e}")
+
+
+# Global orchestrator instance
+_orchestrator_instance: Optional[EZRECOrchestrator] = None
+
+def get_orchestrator_instance() -> EZRECOrchestrator:
+    """Get or create global orchestrator instance"""
+    global _orchestrator_instance
+    if _orchestrator_instance is None:
+        _orchestrator_instance = EZRECOrchestrator()
+    return _orchestrator_instance
+
+async def main():
+    """Main function to run the orchestrator"""
+    orchestrator = get_orchestrator_instance()
+    
+    try:
+        await orchestrator.start_orchestrator()
+    except KeyboardInterrupt:
+        print("\n🛑 Keyboard interrupt received")
+    except Exception as e:
+        print(f"❌ Orchestrator error: {e}")
+    finally:
+        await orchestrator.stop_orchestrator()
 
 if __name__ == "__main__":
-    sys.exit(main()) 
+    print("🎬 EZREC Orchestrator - Complete Booking Lifecycle Manager")
+    print("==========================================================")
+    print("📅 Booking Management: ✅")
+    print("🎬 Recording Control: ✅") 
+    print("⬆️  Video Upload: ✅")
+    print("🧹 Cleanup: ✅")
+    print("📊 Status Updates: Every 3 seconds ✅")
+    print("🎯 Platform: Raspberry Pi + Picamera2 ✅")
+    print()
+    
+    # Run the orchestrator
+    asyncio.run(main()) 

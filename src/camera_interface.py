@@ -1,524 +1,445 @@
 #!/usr/bin/env python3
 """
-EZREC Camera Interface - Optimized for Raspberry Pi
-Handles both Pi Camera (via picamera2) and USB cameras (via OpenCV)
-Features: Enhanced error handling, logging, retry logic, and configuration
+🎬 EZREC Camera Interface - Picamera2 Exclusive Access
+Optimized for Raspberry Pi running Debian with Picamera2
+Ensures exclusive camera access and proper resource management
 """
+
 import os
+import sys
 import time
-import threading
 import logging
+import threading
 from typing import Optional, Tuple, Dict, Any
-import subprocess
-import cv2
+from datetime import datetime, timedelta
+import gc
+
+# Add project root to path
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, project_root)
 
 try:
     from picamera2 import Picamera2
-    from picamera2.encoders import H264Encoder, MJPEGEncoder
+    from picamera2.encoders import H264Encoder, Quality
     from picamera2.outputs import FileOutput
+    import numpy as np
     PICAMERA2_AVAILABLE = True
-    logging.info("Picamera2 library available")
 except ImportError as e:
     PICAMERA2_AVAILABLE = False
-    logging.warning(f"Picamera2 not available: {e}")
+    print(f"❌ Picamera2 not available: {e}")
 
-from config import (
-    RECORD_WIDTH, RECORD_HEIGHT, RECORD_FPS, RECORDING_BITRATE, 
-    TEMP_DIR, DEBUG, NETWORK_TIMEOUT, HARDWARE_ENCODER
-)
+from src.config import Config
 
-class CameraInterface:
-    """Enhanced camera interface with robust error handling and logging."""
+class EZRECCameraInterface:
+    """
+    EZREC Camera Interface with Picamera2 Exclusive Access
+    Optimized for Raspberry Pi Debian with resource protection
+    """
     
-    def __init__(self, width=None, height=None, fps=None, output_dir=None, bitrate=None):
-        # Configuration with fallbacks
-        self.width = width or RECORD_WIDTH
-        self.height = height or RECORD_HEIGHT
-        self.fps = fps or RECORD_FPS
-        self.output_dir = output_dir or str(TEMP_DIR)
-        self.bitrate = bitrate or RECORDING_BITRATE
+    def __init__(self, camera_id: str = "pi_camera_1"):
+        """Initialize camera interface with exclusive access"""
+        self.camera_id = camera_id
+        self.picam: Optional[Picamera2] = None
+        self.encoder: Optional[H264Encoder] = None
+        self.output: Optional[FileOutput] = None
+        self.is_recording = False
+        self.current_recording_path: Optional[str] = None
+        self.recording_start_time: Optional[datetime] = None
+        self.recording_thread: Optional[threading.Thread] = None
+        self.stop_recording_event = threading.Event()
+        self.lock = threading.Lock()
         
-        # State management
-        self.camera_type = None  # 'picamera2' or 'opencv'
-        self.picam = None
-        self.cap = None
-        self.encoder = None
-        self.writer = None
-        self.recording = False
-        self.recording_path = None
-        self.recording_thread = None
-        self.frame_count = 0
-        self.last_frame_time = 0
+        # Configuration
+        self.config = Config()
+        self.temp_dir = "/opt/ezrec-backend/temp"
+        self.recordings_dir = "/opt/ezrec-backend/recordings"
+        
+        # Camera settings optimized for recording
+        self.recording_resolution = (1920, 1080)  # Full HD
+        self.preview_resolution = (640, 480)      # Lower for status checks
+        self.framerate = 30
+        self.quality = Quality.HIGH
+        
+        # Ensure directories exist
+        os.makedirs(self.temp_dir, exist_ok=True)
+        os.makedirs(self.recordings_dir, exist_ok=True)
         
         # Setup logging
-        self.logger = logging.getLogger(f"{__name__}.CameraInterface")
+        self.logger = logging.getLogger(f"EZREC.Camera.{camera_id}")
+        self.logger.setLevel(logging.INFO)
         
-        # Ensure output directory exists
-        os.makedirs(self.output_dir, exist_ok=True)
-        
-        # Initialize camera with retry logic
-        self._initialize_camera_with_retry()
-
-    def _initialize_camera_with_retry(self, max_retries=3, delay=2):
-        """Initialize camera with retry logic and proper error handling."""
-        for attempt in range(max_retries):
-            try:
-                # Run camera detection first for diagnostics
-                if attempt == 0:  # Only on first attempt to avoid spam
-                    try:
-                        available_cameras = detect_cameras()
-                        self.logger.info(f"Available cameras detected: {available_cameras}")
-                    except Exception as e:
-                        self.logger.warning(f"Camera detection failed: {e}")
-                
-                self._detect_and_initialize_camera()
-                
-                # Verify camera is actually working by capturing a test frame
-                test_frame = self.capture_frame()
-                if test_frame is not None:
-                    self.logger.info(f"Camera initialized and verified successfully on attempt {attempt + 1}")
-                    return
-                else:
-                    self.logger.warning("Camera initialized but failed test frame capture")
-                    self.release()  # Clean up before retry
-                    raise RuntimeError("Camera test frame capture failed")
-                    
-            except Exception as e:
-                self.logger.warning(f"Camera initialization attempt {attempt + 1} failed: {e}")
-                if attempt < max_retries - 1:
-                    self.logger.info(f"Retrying camera initialization in {delay} seconds...")
-                    time.sleep(delay)
-                else:
-                    self.logger.error("All camera initialization attempts failed")
-                    # Don't raise exception - let camera interface handle gracefully
-                    self.camera_type = None
-
-    def _detect_and_initialize_camera(self):
-        """Detect and initialize the best available camera."""
-        # Try Pi Camera first (more reliable on Raspberry Pi)
-        if PICAMERA2_AVAILABLE:
-            if self._try_picamera2():
-                return
-        
-        # Fallback to USB cameras
-        if self._try_opencv_cameras():
+        if not PICAMERA2_AVAILABLE:
+            self.logger.error("❌ Picamera2 not available - camera disabled")
             return
             
-        raise RuntimeError("No working camera found (tried Pi Camera and USB cameras)")
-
-    def _try_picamera2(self) -> bool:
-        """Try to initialize Pi Camera using picamera2."""
+        # Initialize camera with exclusive access
+        self._initialize_camera_exclusive()
+    
+    def _initialize_camera_exclusive(self) -> bool:
+        """Initialize camera with exclusive access protection"""
         try:
-            self.logger.info("Attempting to initialize Pi Camera (picamera2)...")
+            self.logger.info("🎬 Initializing Picamera2 with exclusive access...")
             
+            # Ensure no other process is using camera
+            self._ensure_exclusive_access()
+            
+            # Create Picamera2 instance
             self.picam = Picamera2()
+            self.logger.info("✅ Picamera2 object created")
             
-            # Configure for video with optimal settings
-            video_config = self.picam.create_video_configuration(
-                main={"size": (self.width, self.height), "format": "YUV420"},
-                controls={
-                    "FrameRate": self.fps,
-                    "ExposureTime": 10000,  # Auto exposure
-                    "AnalogueGain": 1.0,
-                }
+            # Get camera properties
+            camera_props = self.picam.camera_properties
+            self.logger.info(f"📹 Camera properties: {camera_props}")
+            
+            # Create optimized configuration for recording
+            self._configure_for_recording()
+            
+            self.logger.info("✅ Camera initialized successfully with exclusive access")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"❌ Camera initialization failed: {e}")
+            self.picam = None
+            return False
+    
+    def _ensure_exclusive_access(self):
+        """Ensure no other process is using the camera"""
+        try:
+            import psutil
+            
+            # Check for competing processes
+            camera_processes = []
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                try:
+                    cmdline = ' '.join(proc.info['cmdline'] or [])
+                    if any(term in cmdline.lower() for term in 
+                          ['libcamera', 'motion', 'mjpg', 'vlc', 'cheese', 'opencv']):
+                        if proc.info['name'] != 'python3':  # Don't kill ourselves
+                            camera_processes.append(proc)
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+            
+            # Terminate competing processes
+            for proc in camera_processes:
+                try:
+                    self.logger.warning(f"🛑 Terminating competing camera process: {proc.info['name']} (PID: {proc.info['pid']})")
+                    proc.terminate()
+                    proc.wait(timeout=3)
+                except (psutil.NoSuchProcess, psutil.TimeoutExpired):
+                    try:
+                        proc.kill()
+                    except psutil.NoSuchProcess:
+                        pass
+                        
+        except ImportError:
+            # psutil not available, use basic process killing
+            os.system("pkill -f 'motion|mjpg|vlc|cheese' 2>/dev/null || true")
+    
+    def _configure_for_recording(self):
+        """Configure camera optimally for recording"""
+        try:
+            # Create recording configuration
+            recording_config = self.picam.create_video_configuration(
+                main={"size": self.recording_resolution, "format": "RGB888"},
+                lores={"size": self.preview_resolution, "format": "YUV420"}
             )
             
-            self.picam.configure(video_config)
-            self.picam.start()
+            # Set framerate
+            recording_config["controls"] = {
+                "FrameRate": self.framerate,
+                "ExposureMode": 0,  # Auto exposure
+                "AwbMode": 0,       # Auto white balance
+                "Brightness": 0.0,
+                "Contrast": 1.0,
+                "Saturation": 1.0
+            }
             
-            # Test frame capture
-            test_frame = self.picam.capture_array()
-            if test_frame is not None:
-                self.camera_type = 'picamera2'
-                self.logger.info(f"Pi Camera initialized: {self.width}x{self.height}@{self.fps}fps")
+            self.picam.configure(recording_config)
+            self.logger.info(f"✅ Camera configured for recording: {self.recording_resolution}@{self.framerate}fps")
+            
+        except Exception as e:
+            self.logger.error(f"❌ Camera configuration failed: {e}")
+            raise
+    
+    def get_status(self) -> Dict[str, Any]:
+        """Get current camera status"""
+        try:
+            if not self.is_available():
+                return {
+                    "camera_id": self.camera_id,
+                    "status": "unavailable",
+                    "is_recording": False,
+                    "error": "Camera not initialized"
+                }
+            
+            status = {
+                "camera_id": self.camera_id,
+                "status": "active" if self.picam else "inactive",
+                "is_recording": self.is_recording,
+                "recording_path": self.current_recording_path,
+                "recording_duration": None,
+                "resolution": f"{self.recording_resolution[0]}x{self.recording_resolution[1]}",
+                "framerate": self.framerate,
+                "temperature": self._get_cpu_temperature(),
+                "memory_usage": self._get_memory_usage(),
+                "last_check": datetime.now().isoformat()
+            }
+            
+            if self.is_recording and self.recording_start_time:
+                duration = datetime.now() - self.recording_start_time
+                status["recording_duration"] = str(duration).split('.')[0]  # Remove microseconds
+            
+            return status
+            
+        except Exception as e:
+            self.logger.error(f"❌ Status check failed: {e}")
+            return {
+                "camera_id": self.camera_id,
+                "status": "error",
+                "error": str(e),
+                "is_recording": False
+            }
+    
+    def is_available(self) -> bool:
+        """Check if camera is available and working"""
+        return PICAMERA2_AVAILABLE and self.picam is not None
+    
+    def start_recording(self, booking_id: str, output_path: str) -> bool:
+        """Start recording for a booking"""
+        with self.lock:
+            try:
+                if not self.is_available():
+                    self.logger.error("❌ Cannot start recording - camera not available")
+                    return False
+                
+                if self.is_recording:
+                    self.logger.warning("⚠️  Already recording - stopping current recording first")
+                    self.stop_recording()
+                
+                self.logger.info(f"🎬 Starting recording for booking {booking_id}")
+                
+                # Ensure output directory exists
+                os.makedirs(os.path.dirname(output_path), exist_ok=True)
+                
+                # Start camera if not already started
+                if not self.picam.started:
+                    self.picam.start()
+                    time.sleep(1)  # Allow camera to stabilize
+                
+                # Create encoder
+                self.encoder = H264Encoder(bitrate=10000000, repeat=True, iperiod=30)
+                
+                # Create output
+                self.output = FileOutput(output_path)
+                
+                # Start recording
+                self.picam.start_recording(self.encoder, self.output)
+                
+                # Update state
+                self.is_recording = True
+                self.current_recording_path = output_path
+                self.recording_start_time = datetime.now()
+                self.stop_recording_event.clear()
+                
+                self.logger.info(f"✅ Recording started: {output_path}")
                 return True
+                
+            except Exception as e:
+                self.logger.error(f"❌ Failed to start recording: {e}")
+                self.is_recording = False
+                self.current_recording_path = None
+                return False
+    
+    def stop_recording(self) -> Tuple[bool, Optional[str]]:
+        """Stop current recording"""
+        with self.lock:
+            try:
+                if not self.is_recording:
+                    self.logger.warning("⚠️  Not currently recording")
+                    return True, None
+                
+                self.logger.info("🛑 Stopping recording...")
+                
+                # Stop recording
+                if self.picam and self.picam.started:
+                    self.picam.stop_recording()
+                
+                # Get recording path before clearing
+                recording_path = self.current_recording_path
+                
+                # Clear state
+                self.is_recording = False
+                self.current_recording_path = None
+                self.recording_start_time = None
+                self.stop_recording_event.set()
+                
+                # Cleanup encoder and output
+                if self.encoder:
+                    self.encoder = None
+                if self.output:
+                    self.output = None
+                
+                # Force garbage collection
+                gc.collect()
+                
+                self.logger.info(f"✅ Recording stopped: {recording_path}")
+                return True, recording_path
+                
+            except Exception as e:
+                self.logger.error(f"❌ Failed to stop recording: {e}")
+                return False, None
+    
+    def capture_test_frame(self) -> Tuple[bool, Optional[str]]:
+        """Capture a test frame to verify camera functionality"""
+        try:
+            if not self.is_available():
+                return False, "Camera not available"
+            
+            test_path = os.path.join(self.temp_dir, f"test_frame_{int(time.time())}.jpg")
+            
+            # Start camera if needed
+            was_started = self.picam.started
+            if not was_started:
+                self.picam.start()
+                time.sleep(1)
+            
+            # Capture image
+            self.picam.capture_file(test_path)
+            
+            # Stop camera if we started it
+            if not was_started:
+                self.picam.stop()
+            
+            # Verify file exists and has content
+            if os.path.exists(test_path) and os.path.getsize(test_path) > 0:
+                self.logger.info(f"✅ Test frame captured: {test_path}")
+                return True, test_path
             else:
-                raise RuntimeError("Failed to capture test frame")
+                return False, "Test frame file empty or missing"
                 
         except Exception as e:
-            self.logger.warning(f"Pi Camera initialization failed: {e}")
+            self.logger.error(f"❌ Test frame capture failed: {e}")
+            return False, str(e)
+    
+    def cleanup(self):
+        """Clean up camera resources"""
+        try:
+            self.logger.info("🧹 Cleaning up camera resources...")
+            
+            # Stop recording if active
+            if self.is_recording:
+                self.stop_recording()
+            
+            # Stop and close camera
             if self.picam:
                 try:
-                    self.picam.stop()
+                    if self.picam.started:
+                        self.picam.stop()
                     self.picam.close()
-                except:
-                    pass
-                self.picam = None
-            return False
-
-    def _try_opencv_cameras(self) -> bool:
-        """Try to initialize USB cameras using OpenCV."""
-        # Common camera indices to try
-        camera_indices = [0, 1, 2, 4, 6]  # Skip some problematic indices
-        
-        for idx in camera_indices:
-            try:
-                self.logger.info(f"Trying USB camera at /dev/video{idx}...")
-                
-                cap = cv2.VideoCapture(idx)
-                if not cap.isOpened():
-                    continue
-                
-                # Configure camera properties
-                cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
-                cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
-                cap.set(cv2.CAP_PROP_FPS, self.fps)
-                cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Reduce latency
-                
-                # Test frame capture with timeout
-                for _ in range(5):  # Try a few frames
-                    ret, frame = cap.read()
-                    if ret and frame is not None:
-                        actual_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                        actual_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-                        actual_fps = cap.get(cv2.CAP_PROP_FPS)
-                        
-                        self.cap = cap
-                        self.camera_type = 'opencv'
-                        self.logger.info(f"USB camera initialized at /dev/video{idx}: "
-                                       f"{actual_width}x{actual_height}@{actual_fps}fps")
-                        return True
-                        
-                cap.release()
-                
-            except Exception as e:
-                self.logger.warning(f"Failed to initialize camera at /dev/video{idx}: {e}")
-                
-        return False
-
-    def capture_frame(self) -> Optional[any]:
-        """Capture a single frame with error handling and retry logic."""
-        if not self._is_camera_ready():
-            self.logger.error("Camera not ready for frame capture")
-            return None
+                except Exception as e:
+                    self.logger.warning(f"Warning during camera cleanup: {e}")
+                finally:
+                    self.picam = None
             
-        max_retries = 3
-        for attempt in range(max_retries):
-            try:
-                if self.camera_type == 'picamera2':
-                    frame = self.picam.capture_array()
-                    if frame is not None:
-                        # Convert RGB to BGR for OpenCV compatibility
-                        frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-                        self.frame_count += 1
-                        self.last_frame_time = time.time()
-                        return frame
-                        
-                elif self.camera_type == 'opencv':
-                    ret, frame = self.cap.read()
-                    if ret and frame is not None:
-                        self.frame_count += 1
-                        self.last_frame_time = time.time()
-                        return frame
-                    
-            except Exception as e:
-                self.logger.warning(f"Frame capture attempt {attempt + 1} failed: {e}")
-                if attempt < max_retries - 1:
-                    time.sleep(0.1)  # Brief pause before retry
-                    
-        self.logger.error("All frame capture attempts failed")
-        return None
-
-    def start_recording(self, filename: Optional[str] = None) -> str:
-        """Start video recording with enhanced error handling."""
-        if self.recording:
-            self.logger.warning("Already recording")
-            return self.recording_path
+            # Clear references
+            self.encoder = None
+            self.output = None
             
-        if not self._is_camera_ready():
-            raise RuntimeError("Camera not ready for recording")
+            # Force garbage collection
+            gc.collect()
             
-        try:
-            # Generate filename if not provided
-            if not filename:
-                timestamp = time.strftime("%Y%m%d_%H%M%S")
-                filename = f"recording_{timestamp}_manual.mp4"
-                
-            self.recording_path = os.path.join(self.output_dir, filename)
-            self.logger.info(f"Starting recording: {self.recording_path}")
-            
-            if self.camera_type == 'picamera2':
-                self._start_picamera2_recording()
-            elif self.camera_type == 'opencv':
-                self._start_opencv_recording()
-            else:
-                raise RuntimeError("No camera available for recording")
-                
-            self.recording = True
-            self.logger.info(f"Recording started successfully: {filename}")
-            return self.recording_path
+            self.logger.info("✅ Camera cleanup completed")
             
         except Exception as e:
-            self.logger.error(f"Failed to start recording: {e}")
-            self.recording = False
-            raise
-
-    def _start_picamera2_recording(self):
-        """Start recording with Pi Camera using H264 encoder."""
-        try:
-            # Stop camera for reconfiguration
-            self.picam.stop()
-            
-            # Configure for high-quality recording
-            video_config = self.picam.create_video_configuration(
-                main={"size": (self.width, self.height), "format": "YUV420"},
-                controls={"FrameRate": self.fps}
-            )
-            self.picam.configure(video_config)
-            
-            # Create H264 encoder with specified bitrate
-            self.encoder = H264Encoder(bitrate=self.bitrate)
-            
-            # Start camera and recording
-            self.picam.start()
-            self.picam.start_recording(self.encoder, self.recording_path)
-            
-        except Exception as e:
-            self.logger.error(f"Pi Camera recording setup failed: {e}")
-            raise
-
-    def _start_opencv_recording(self):
-        """Start recording with USB camera using OpenCV VideoWriter."""
-        try:
-            # Try H264 codec first (best quality)
-            fourcc_options = [
-                ('H264', cv2.VideoWriter_fourcc(*'H264')),
-                ('MP4V', cv2.VideoWriter_fourcc(*'MP4V')),
-                ('XVID', cv2.VideoWriter_fourcc(*'XVID')),
-            ]
-            
-            for codec_name, fourcc in fourcc_options:
-                self.writer = cv2.VideoWriter(
-                    self.recording_path, fourcc, self.fps, (self.width, self.height)
-                )
-                
-                if self.writer.isOpened():
-                    self.logger.info(f"Using {codec_name} codec for recording")
-                    break
-                else:
-                    self.writer.release()
-                    self.writer = None
-                    
-            if not self.writer:
-                raise RuntimeError("Failed to initialize video writer with any codec")
-                
-            # Start recording thread
-            self.recording_thread = threading.Thread(target=self._opencv_recording_loop)
-            self.recording_thread.daemon = True
-            self.recording_thread.start()
-            
-        except Exception as e:
-            self.logger.error(f"USB camera recording setup failed: {e}")
-            raise
-
-    def _opencv_recording_loop(self):
-        """Recording loop for OpenCV cameras."""
-        frame_interval = 1.0 / self.fps
-        last_frame_time = time.time()
-        
-        while self.recording:
-            try:
-                current_time = time.time()
-                if current_time - last_frame_time >= frame_interval:
-                    frame = self.capture_frame()
-                    if frame is not None:
-                        self.writer.write(frame)
-                        last_frame_time = current_time
-                    else:
-                        self.logger.warning("Failed to capture frame during recording")
-                        break
-                        
-                time.sleep(0.001)  # Prevent busy waiting
-                
-            except Exception as e:
-                self.logger.error(f"Error in recording loop: {e}")
-                break
-
-    def stop_recording(self) -> Optional[str]:
-        """Stop recording and return the recorded file path."""
-        if not self.recording:
-            self.logger.warning("Not currently recording")
-            return None
-            
-        try:
-            recording_path = self.recording_path
-            self.recording = False
-            
-            if self.camera_type == 'picamera2':
-                self.picam.stop_recording()
-                self.encoder = None
-                
-                # Reconfigure back to preview mode
-                self.picam.stop()
-                preview_config = self.picam.create_preview_configuration(
-                    main={"size": (640, 480), "format": "RGB888"}
-                )
-                self.picam.configure(preview_config)
-                self.picam.start()
-                
-            elif self.camera_type == 'opencv':
-                if self.recording_thread:
-                    self.recording_thread.join(timeout=5)
-                if self.writer:
-                    self.writer.release()
-                    self.writer = None
-                    
-            # Verify file was created and has content
-            if recording_path and os.path.exists(recording_path):
-                file_size = os.path.getsize(recording_path)
-                if file_size > 0:
-                    self.logger.info(f"Recording stopped successfully: {recording_path} ({file_size} bytes)")
-                    return recording_path
-                else:
-                    self.logger.error("Recording file is empty")
-            else:
-                self.logger.error("Recording file not found")
-                
-            return None
-            
-        except Exception as e:
-            self.logger.error(f"Error stopping recording: {e}")
-            return None
-
-    def get_camera_info(self) -> Dict[str, Any]:
-        """Get detailed camera information."""
-        info = {
-            "camera_type": self.camera_type,
-            "resolution": f"{self.width}x{self.height}",
-            "fps": self.fps,
-            "bitrate": self.bitrate,
-            "recording": self.recording,
-            "frame_count": self.frame_count,
-            "last_frame_time": self.last_frame_time,
-        }
-        
-        if self.camera_type == 'opencv' and self.cap:
-            info.update({
-                "actual_width": int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
-                "actual_height": int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),
-                "actual_fps": self.cap.get(cv2.CAP_PROP_FPS),
-                "backend": self.cap.getBackendName(),
-            })
-            
-        return info
-
-    def health_check(self) -> bool:
-        """Perform a comprehensive health check on the camera."""
-        try:
-            # Check if camera is initialized
-            if not self._is_camera_ready():
-                self.logger.warning("Camera health check failed: Camera not ready/initialized")
-                return False
-            
-            # Check camera type and specific health
-            if self.camera_type == 'picamera2':
-                if not self.picam:
-                    self.logger.warning("Camera health check failed: Pi Camera object is None")
-                    return False
-            elif self.camera_type == 'opencv':
-                if not self.cap or not self.cap.isOpened():
-                    self.logger.warning("Camera health check failed: OpenCV camera not opened")
-                    return False
-            else:
-                self.logger.warning("Camera health check failed: Unknown camera type")
-                return False
-                
-            # Try to capture a test frame (most comprehensive test)
-            frame = self.capture_frame()
-            if frame is not None:
-                self.logger.debug("Camera health check passed")
-                return True
-            else:
-                self.logger.warning("Camera health check failed: Unable to capture test frame")
-                return False
-            
-        except Exception as e:
-            self.logger.error(f"Camera health check failed with exception: {e}")
-            return False
-
-    def _is_camera_ready(self) -> bool:
-        """Check if camera is ready for operations."""
-        if self.camera_type == 'picamera2':
-            return self.picam is not None
-        elif self.camera_type == 'opencv':
-            return self.cap is not None and self.cap.isOpened()
-        return False
-
-    def release(self):
-        """Clean up camera resources."""
-        try:
-            if self.recording:
-                self.stop_recording()
-                
-            if self.camera_type == 'picamera2' and self.picam:
-                self.picam.stop()
-                self.picam.close()
-                self.picam = None
-                
-            elif self.camera_type == 'opencv' and self.cap:
-                self.cap.release()
-                self.cap = None
-                
-            self.camera_type = None
-            self.logger.info("Camera resources released")
-            
-        except Exception as e:
-            self.logger.error(f"Error releasing camera: {e}")
-
-    def __del__(self):
-        """Destructor to ensure cleanup."""
-        self.release()
-
-# Utility functions for camera detection
-def detect_cameras() -> Dict[str, Any]:
-    """Detect all available cameras on the system."""
-    cameras = {"picamera": False, "usb_cameras": []}
+            self.logger.error(f"❌ Camera cleanup failed: {e}")
     
-    # Check for Pi Camera
-    if PICAMERA2_AVAILABLE:
+    def _get_cpu_temperature(self) -> Optional[float]:
+        """Get CPU temperature"""
         try:
-            picam = Picamera2()
-            picam.close()
-            cameras["picamera"] = True
+            with open('/sys/class/thermal/thermal_zone0/temp', 'r') as f:
+                temp = float(f.read().strip()) / 1000.0
+                return round(temp, 1)
         except:
-            pass
+            return None
     
-    # Check for USB cameras
-    for i in range(8):
+    def _get_memory_usage(self) -> Dict[str, Any]:
+        """Get memory usage information"""
         try:
-            cap = cv2.VideoCapture(i)
-            if cap.isOpened():
-                ret, _ = cap.read()
-                if ret:
-                    cameras["usb_cameras"].append(i)
-            cap.release()
-        except:
-            pass
+            import psutil
+            memory = psutil.virtual_memory()
+            return {
+                "total_mb": round(memory.total / 1024 / 1024),
+                "available_mb": round(memory.available / 1024 / 1024),
+                "used_percent": memory.percent
+            }
+        except ImportError:
+            return {"error": "psutil not available"}
     
-    return cameras
+    def __enter__(self):
+        """Context manager entry"""
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit"""
+        self.cleanup()
 
-def test_camera_interface():
-    """Test function for camera interface."""
-    try:
-        camera = CameraInterface()
-        info = camera.get_camera_info()
-        print(f"Camera Info: {info}")
-        
-        # Test frame capture
-        frame = camera.capture_frame()
-        if frame is not None:
-            print(f"Frame captured: {frame.shape}")
-        else:
-            print("Failed to capture frame")
-            
-        camera.release()
-        return True
-    except Exception as e:
-        print(f"Camera test failed: {e}")
-        return False
+
+# Global camera instance for the application
+_camera_instance: Optional[EZRECCameraInterface] = None
+
+def get_camera_instance(camera_id: str = "pi_camera_1") -> EZRECCameraInterface:
+    """Get or create the global camera instance"""
+    global _camera_instance
+    if _camera_instance is None:
+        _camera_instance = EZRECCameraInterface(camera_id)
+    return _camera_instance
+
+def cleanup_camera_instance():
+    """Cleanup the global camera instance"""
+    global _camera_instance
+    if _camera_instance:
+        _camera_instance.cleanup()
+        _camera_instance = None
+
 
 if __name__ == "__main__":
-    # Run camera test
-    print("Testing camera interface...")
-    success = test_camera_interface()
-    print(f"Camera test {'passed' if success else 'failed'}") 
+    # Test the camera interface
+    print("🎬 EZREC Camera Interface Test")
+    print("==============================")
+    
+    with EZRECCameraInterface() as camera:
+        print(f"📹 Camera available: {camera.is_available()}")
+        
+        if camera.is_available():
+            # Test status
+            status = camera.get_status()
+            print(f"📊 Status: {status}")
+            
+            # Test frame capture
+            success, result = camera.capture_test_frame()
+            if success:
+                print(f"✅ Test frame: {result}")
+            else:
+                print(f"❌ Test frame failed: {result}")
+            
+            # Test short recording
+            test_video = "/tmp/ezrec_interface_test.mp4"
+            print(f"🎬 Testing recording to {test_video}")
+            
+            if camera.start_recording("test_booking", test_video):
+                print("✅ Recording started")
+                time.sleep(3)  # Record for 3 seconds
+                
+                success, path = camera.stop_recording()
+                if success:
+                    print(f"✅ Recording completed: {path}")
+                    if os.path.exists(test_video):
+                        size = os.path.getsize(test_video)
+                        print(f"📹 Video size: {size} bytes")
+                        os.remove(test_video)
+                else:
+                    print("❌ Recording stop failed")
+            else:
+                print("❌ Recording start failed")
+    
+    print("🏁 Camera interface test completed") 
