@@ -350,9 +350,37 @@ def load_booking() -> Optional[Dict[str, Any]]:
                     # ISO format timestamp
                     end_time = datetime.fromisoformat(booking['end_time'])
                 else:
-                    # Simple time format (HH:MM) - combine with booking date
+                    # Parse time with flexible format support
                     booking_date = booking['date']
-                    end_time = datetime.strptime(f"{booking_date} {end_time_str}", "%Y-%m-%d %H:%M")
+                    
+                    # Try different time formats
+                    time_formats = [
+                        "%Y-%m-%d %H:%M",           # HH:MM format
+                        "%Y-%m-%d %H:%M:%S",        # HH:MM:SS format  
+                        "%Y-%m-%d %H:%M:%S.%f"      # HH:MM:SS.microseconds format
+                    ]
+                    
+                    end_time = None
+                    for fmt in time_formats:
+                        try:
+                            end_time = datetime.strptime(f"{booking_date} {end_time_str}", fmt)
+                            break
+                        except ValueError:
+                            continue
+                    
+                    # If all formats fail, try to extract just HH:MM
+                    if end_time is None and ":" in end_time_str:
+                        try:
+                            time_parts = end_time_str.split(":")
+                            if len(time_parts) >= 2:
+                                clean_time = f"{time_parts[0]}:{time_parts[1]}"
+                                end_time = datetime.strptime(f"{booking_date} {clean_time}", "%Y-%m-%d %H:%M")
+                        except Exception:
+                            pass
+                    
+                    if end_time is None:
+                        raise ValueError(f"Unable to parse time format: {end_time_str}")
+                    
                     end_time = end_time.replace(tzinfo=local_now().tzinfo)
                     
                 if local_now() > end_time:
