@@ -196,7 +196,7 @@ def upload_video_to_supabase(video_path: str, booking_id: str = None) -> Dict[st
                 'user_id': USER_ID,
                 'filename': filename,
                 'storage_path': storage_path,
-                'booking_id': booking_id
+                'booking_id': str(booking_id) if booking_id else None
             }
             
             # Insert into videos table
@@ -390,10 +390,13 @@ def complete_booking(booking_id: str) -> bool:
             logger.warning("Supabase client not available for booking completion")
             return False
         
+        logger.info(f"🎯 Completing booking: {booking_id}")
+        
         # FIXED: Delete booking from database (removes from bookings table)
+        # Ensure booking_id is treated as string for compatibility
         response = supabase.table("bookings")\
             .delete()\
-            .eq("id", booking_id)\
+            .eq("id", str(booking_id))\
             .execute()
         
         if response.data is not None:  # DELETE returns empty list on success
