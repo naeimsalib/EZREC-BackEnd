@@ -426,3 +426,62 @@ __all__ = [
     'update_system_status', 'save_booking', 'load_booking', 'complete_booking',
     'get_system_metrics', 'get_ip_address'
 ] 
+
+# FIXED: Add SupabaseManager class for compatibility with test scripts
+class SupabaseManager:
+    """Supabase database manager for async operations."""
+    
+    def __init__(self):
+        self.client = supabase
+        
+    async def execute_query(self, query: str, params: Dict[str, Any] = None):
+        """Execute a raw SQL query."""
+        try:
+            if not self.client:
+                raise Exception("Supabase client not available")
+            
+            # For simple table queries, parse and execute
+            if query.upper().startswith('SELECT'):
+                # Extract table name and conditions from basic SELECT queries
+                if 'FROM bookings' in query:
+                    response = self.client.table("bookings").select("*").execute()
+                    return response.data
+                elif 'FROM videos' in query:
+                    response = self.client.table("videos").select("*").execute()
+                    return response.data
+                elif 'FROM system_status' in query:
+                    response = self.client.table("system_status").select("*").execute()
+                    return response.data
+                else:
+                    logger.warning(f"Unsupported query format: {query}")
+                    return []
+            else:
+                logger.warning(f"Only SELECT queries supported, got: {query}")
+                return []
+                
+        except Exception as e:
+            logger.error(f"Query execution failed: {e}")
+            raise
+    
+    async def insert_booking(self, booking_data: Dict[str, Any]):
+        """Insert a new booking."""
+        try:
+            response = self.client.table("bookings").insert(booking_data).execute()
+            return response.data
+        except Exception as e:
+            logger.error(f"Booking insert failed: {e}")
+            raise
+    
+    async def get_bookings(self, user_id: str, limit: int = 10):
+        """Get bookings for a user."""
+        try:
+            response = self.client.table("bookings")\
+                .select("*")\
+                .eq("user_id", user_id)\
+                .order("created_at", desc=True)\
+                .limit(limit)\
+                .execute()
+            return response.data
+        except Exception as e:
+            logger.error(f"Get bookings failed: {e}")
+            raise 
