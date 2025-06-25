@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 EZREC Recording Upload Script
-Uploads existing recordings to Supabase database and enhances recording workflow
+Uploads video recordings to Supabase Storage and database for dashboard visibility
 """
 import os
 import sys
@@ -10,12 +10,45 @@ import time
 from datetime import datetime
 from pathlib import Path
 import hashlib
+import mimetypes
 
 # Add the src directory to the Python path
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'src'))
 
-from config import RECORDING_DIR, TEMP_DIR, USER_ID, CAMERA_ID
+from config import RECORDING_DIR, TEMP_DIR, USER_ID, CAMERA_ID, SUPABASE_URL, SUPABASE_KEY
 from utils import logger, supabase
+
+# Import storage3 for file uploads
+try:
+    from storage3 import create_client as create_storage_client
+    STORAGE_AVAILABLE = True
+    logger.info("Storage3 library available for file uploads")
+except ImportError as e:
+    STORAGE_AVAILABLE = False
+    logger.error(f"Storage3 not available: {e}")
+    logger.error("Install with: pip install storage3")
+
+def get_storage_client():
+    """Create and return Supabase Storage client."""
+    if not STORAGE_AVAILABLE:
+        return None
+    
+    try:
+        # Create storage client with proper headers
+        headers = {
+            "apiKey": SUPABASE_KEY,
+            "Authorization": f"Bearer {SUPABASE_KEY}"
+        }
+        
+        storage_url = f"{SUPABASE_URL}/storage/v1"
+        storage_client = create_storage_client(storage_url, headers, is_async=False)
+        
+        logger.debug("Storage client created successfully")
+        return storage_client
+        
+    except Exception as e:
+        logger.error(f"Failed to create storage client: {e}")
+        return None
 
 def calculate_file_hash(filepath):
     """Calculate MD5 hash of a file."""
@@ -54,7 +87,45 @@ def parse_recording_filename(filename):
     
     return None
 
-def upload_recording_to_database(recording_path, booking_info=None):
+def upload_video_to_storage(storage_client, local_path, remote_path):
+    """Upload video file to Supabase Storage."""
+    try:
+        # Read file content
+        with open(local_path, 'rb') as f:
+            file_content = f.read()
+        
+        # Get MIME type
+        mime_type, _ = mimetypes.guess_type(local_path)
+        if not mime_type:
+            mime_type = 'video/mp4'
+        
+        # Upload file to storage
+        # Format: videos/{user_id}/filename.mp4
+        response = storage_client.from_("videos").upload(
+            remote_path, 
+            file_content,
+            file_options={"content-type": mime_type}
+        )
+        
+        if response.status_code in [200, 201]:
+            logger.info(f"✅ File uploaded to storage: {remote_path}")
+            
+            # Get public URL for the uploaded file
+            public_url = storage_client.from_("videos").get_public_url(remote_path)
+            return {
+                'success': True,
+                'public_url': public_url,
+                'storage_path': remote_path
+            }
+        else:
+            logger.error(f"❌ Storage upload failed: {response.status_code} - {response.text}")
+            return {'success': False, 'error': f"Upload failed: {response.status_code}"}
+        
+    except Exception as e:
+        logger.error(f"❌ Error uploading to storage: {e}")
+        return {'success': False, 'error': str(e)}
+
+def upload_recording_to_database(recording_path, storage_result, booking_info=None):
     """Upload recording metadata to Supabase database."""
     try:
         file_stats = os.stat(recording_path)
@@ -68,7 +139,8 @@ def upload_recording_to_database(recording_path, booking_info=None):
         if booking_info and booking_info.get('start_time'):
             start_time = booking_info['start_time']
             # Assume 3-minute recording duration if not specified
-            end_time = start_time.replace(second=start_time.second + 180)  # 3 minutes
+            from datetime import timedelta
+            end_time = start_time + timedelta(minutes=3)
         else:
             start_time = datetime.fromtimestamp(file_stats.st_ctime)
             end_time = datetime.fromtimestamp(file_stats.st_mtime)
@@ -79,10 +151,10 @@ def upload_recording_to_database(recording_path, booking_info=None):
             'camera_id': CAMERA_ID,
             'booking_id': booking_info.get('booking_id') if booking_info else None,
             'filename': os.path.basename(recording_path),
-            'file_path': recording_path,
+            'file_path': storage_result.get('storage_path') if storage_result.get('success') else recording_path,
             'file_size': file_stats.st_size,
             'file_hash': file_hash,
-            'duration_seconds': None,  # Could be calculated with ffprobe
+            'duration_seconds': 180,  # 3 minutes default
             'start_time': start_time.isoformat(),
             'end_time': end_time.isoformat(),
             'recording_date': booking_info.get('date') if booking_info else start_time.strftime('%Y-%m-%d'),
@@ -90,15 +162,18 @@ def upload_recording_to_database(recording_path, booking_info=None):
             'format': 'mp4',
             'resolution': '1920x1080',
             'fps': 30,
-            'upload_status': 'uploaded',
-            'uploaded_at': datetime.now().isoformat(),
+            'upload_status': 'uploaded' if storage_result.get('success') else 'local',
+            'uploaded_at': datetime.now().isoformat() if storage_result.get('success') else None,
+            'public_url': storage_result.get('public_url'),
+            'storage_path': storage_result.get('storage_path'),
             'metadata': {
                 'file_size_mb': round(file_stats.st_size / (1024*1024), 2),
                 'camera_type': 'pi_camera',
                 'resolution': '1920x1080',
                 'fps': 30,
                 'bitrate': 10000000,
-                'format': 'h264'
+                'format': 'h264',
+                'uploaded_to_storage': storage_result.get('success', False)
             }
         }
         
@@ -106,65 +181,61 @@ def upload_recording_to_database(recording_path, booking_info=None):
         existing = supabase.table('recordings').select('id').eq('filename', recording_data['filename']).eq('file_size', recording_data['file_size']).execute()
         
         if existing.data:
-            logger.info(f"Recording {recording_data['filename']} already exists in database")
+            logger.info(f"📝 Recording {recording_data['filename']} already exists in database")
             return existing.data[0]['id']
         
         # Insert new recording
         response = supabase.table('recordings').insert(recording_data).execute()
         
         if response.data:
-            logger.info(f"Recording uploaded to database: {recording_data['filename']} ({recording_data['metadata']['file_size_mb']} MB)")
+            size_mb = recording_data['metadata']['file_size_mb']
+            storage_status = "✅ Uploaded to Storage" if storage_result.get('success') else "📍 Local only"
+            logger.info(f"📝 Recording added to database: {recording_data['filename']} ({size_mb} MB) - {storage_status}")
             return response.data[0]['id']
         else:
-            logger.error(f"Failed to upload recording {recording_data['filename']} to database")
+            logger.error(f"❌ Failed to add recording {recording_data['filename']} to database")
             return None
             
     except Exception as e:
-        logger.error(f"Error uploading recording {recording_path}: {e}")
+        logger.error(f"❌ Error uploading recording {recording_path}: {e}")
         return None
 
 def create_recordings_table_if_not_exists():
-    """Create recordings table in Supabase if it doesn't exist."""
+    """Check if recordings table exists and provide creation instructions if needed."""
     try:
         # Try to query the table first
         test_query = supabase.table('recordings').select('id').limit(1).execute()
         logger.info("Recordings table exists")
+        return True
     except Exception as e:
-        logger.warning(f"Recordings table might not exist: {e}")
-        logger.info("You may need to create the recordings table in Supabase manually")
-        print("\nTo create the recordings table in Supabase, run this SQL:")
-        print("""
-CREATE TABLE recordings (
-    id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
-    camera_id TEXT NOT NULL,
-    booking_id TEXT,
-    filename TEXT NOT NULL,
-    file_path TEXT NOT NULL,
-    file_size BIGINT NOT NULL,
-    file_hash TEXT NOT NULL,
-    duration_seconds INTEGER,
-    recording_date DATE NOT NULL,
-    recording_time TIME NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    uploaded_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    status TEXT DEFAULT 'completed',
-    metadata JSONB
-);
-
--- Create indexes for better performance
-CREATE INDEX idx_recordings_user_id ON recordings(user_id);
-CREATE INDEX idx_recordings_camera_id ON recordings(camera_id);
-CREATE INDEX idx_recordings_booking_id ON recordings(booking_id);
-CREATE INDEX idx_recordings_date ON recordings(recording_date);
-        """)
+        if "does not exist" in str(e).lower():
+            logger.error("❌ Recordings table does not exist in Supabase")
+            print("\n🔧 To create the recordings table in Supabase:")
+            print("1. Go to your Supabase dashboard: https://supabase.com/dashboard")
+            print("2. Open SQL Editor")
+            print("3. Run the migration: migrations/006_create_recordings_table.sql")
+            print("4. Or run the fix script: sudo cp ~/code/EZREC-BackEnd/fix_database_schema.py /opt/ezrec-backend/ && sudo -u ezrec /opt/ezrec-backend/venv/bin/python3 fix_database_schema.py")
+            return False
+        else:
+            logger.warning(f"Could not verify recordings table: {e}")
+            return True
 
 def upload_all_existing_recordings():
-    """Upload all existing recordings in the recordings directory."""
+    """Upload all existing recordings to Supabase Storage and database."""
+    # Check if recordings table exists
+    if not create_recordings_table_if_not_exists():
+        logger.error("Cannot proceed without recordings table")
+        return
+    
+    # Initialize storage client
+    storage_client = get_storage_client()
+    if not storage_client:
+        logger.error("❌ Cannot initialize storage client - uploads will be metadata only")
+    
     recording_dir = Path(RECORDING_DIR)
     
     if not recording_dir.exists():
-        logger.error(f"Recordings directory not found: {recording_dir}")
+        logger.error(f"❌ Recordings directory not found: {recording_dir}")
         return
     
     # Find all video files
@@ -175,84 +246,122 @@ def upload_all_existing_recordings():
         video_files.extend(recording_dir.glob(f'*{ext}'))
     
     if not video_files:
-        logger.info("No video files found in recordings directory")
+        logger.info("📂 No video files found in recordings directory")
         return
     
-    logger.info(f"Found {len(video_files)} video files to upload")
+    logger.info(f"📁 Found {len(video_files)} video files to upload")
     
     uploaded_count = 0
     failed_count = 0
+    total_size = 0
     
     for video_file in video_files:
-        logger.info(f"Processing: {video_file.name}")
+        logger.info(f"🎬 Processing: {video_file.name}")
         
         # Parse booking info from filename
         booking_info = parse_recording_filename(video_file.name)
         
-        # Upload to database
-        result = upload_recording_to_database(str(video_file), booking_info)
+        # Prepare storage upload
+        storage_result = {'success': False}
         
-        if result:
+        if storage_client:
+            # Create remote path: videos/{user_id}/filename.mp4
+            remote_path = f"{USER_ID}/{video_file.name}"
+            
+            # Upload to Supabase Storage
+            storage_result = upload_video_to_storage(storage_client, str(video_file), remote_path)
+        else:
+            logger.warning(f"⚠️  Storage client not available - adding {video_file.name} to database only")
+        
+        # Upload metadata to database
+        db_result = upload_recording_to_database(str(video_file), storage_result, booking_info)
+        
+        if db_result:
             uploaded_count += 1
+            total_size += video_file.stat().st_size
         else:
             failed_count += 1
     
-    logger.info(f"Upload complete: {uploaded_count} successful, {failed_count} failed")
-    return uploaded_count, failed_count
+    # Summary
+    total_size_mb = round(total_size / (1024*1024), 1)
+    logger.info(f"📊 Upload complete: {uploaded_count} successful, {failed_count} failed")
+    logger.info(f"📊 Total size processed: {total_size_mb} MB")
+    
+    if uploaded_count > 0:
+        print(f"\n✅ Successfully processed {uploaded_count} recordings ({total_size_mb} MB)")
+        print(f"📱 Recordings are now visible in your dashboard under user: {USER_ID}")
+        
+        if storage_client:
+            print(f"🌐 Files uploaded to Supabase Storage: videos/{USER_ID}/")
+        else:
+            print("⚠️  Files remain local - install storage3 library for cloud storage")
+    
+    if failed_count > 0:
+        print(f"⚠️  {failed_count} recordings failed to upload")
+
+def check_storage_bucket():
+    """Check if the videos bucket exists in Supabase Storage."""
+    storage_client = get_storage_client()
+    if not storage_client:
+        return False
+    
+    try:
+        # List buckets to check if 'videos' exists
+        buckets = storage_client.list_buckets()
+        video_bucket_exists = any(bucket.get('name') == 'videos' for bucket in buckets)
+        
+        if video_bucket_exists:
+            logger.info("✅ 'videos' bucket exists in Supabase Storage")
+            return True
+        else:
+            logger.error("❌ 'videos' bucket not found in Supabase Storage")
+            print("\n🔧 To create the videos bucket:")
+            print("1. Go to your Supabase dashboard: https://supabase.com/dashboard")
+            print("2. Navigate to Storage")
+            print("3. Create a new bucket named 'videos'")
+            print("4. Set it to public if you want direct access to videos")
+            return False
+            
+    except Exception as e:
+        logger.error(f"❌ Error checking storage buckets: {e}")
+        return False
 
 def main():
-    """Main function."""
+    """Main function to handle recording uploads."""
     print("EZREC Recording Upload Script")
-    print("============================")
+    print("=" * 40)
     
-    # Check Supabase connection
+    # Test Supabase connection
     if not supabase:
-        print("❌ Supabase connection failed")
-        return 1
+        print("❌ Supabase client not available")
+        sys.exit(1)
     
     print("✅ Supabase connection successful")
     
-    # Check/create recordings table
-    create_recordings_table_if_not_exists()
+    # Check storage bucket
+    if STORAGE_AVAILABLE:
+        bucket_exists = check_storage_bucket()
+        if not bucket_exists:
+            print("⚠️  Videos bucket not found - uploads will be metadata only")
     
-    # Upload existing recordings
-    print(f"\nScanning recordings directory: {RECORDING_DIR}")
+    # Start upload process
+    upload_all_existing_recordings()
     
+    # Show current recordings in database
     try:
-        uploaded, failed = upload_all_existing_recordings()
+        result = supabase.table('recordings').select('filename, file_size, start_time, upload_status').eq('user_id', USER_ID).order('start_time', desc=True).execute()
         
-        if uploaded > 0:
-            print(f"\n✅ Successfully uploaded {uploaded} recordings to database")
-        
-        if failed > 0:
-            print(f"⚠️  {failed} recordings failed to upload")
-        
-        # Show current recordings in database
-        try:
-            recordings = supabase.table('recordings').select('filename, file_size, recording_date, start_time').order('created_at', desc=True).execute()
+        if result.data:
+            print(f"\n📊 Current recordings in database ({len(result.data)}):")
+            for rec in result.data:
+                size_mb = round(rec['file_size'] / (1024*1024), 1)
+                status = "☁️" if rec.get('upload_status') == 'uploaded' else "📍"
+                print(f"  {status} {rec['filename']} ({size_mb}MB) - {rec['start_time']}")
+        else:
+            print("\n📂 No recordings found in database")
             
-            if recordings.data:
-                print(f"\n📊 Current recordings in database ({len(recordings.data)} total):")
-                for rec in recordings.data[:10]:  # Show first 10
-                    size_mb = round(rec.get('file_size', 0) / (1024*1024), 1)
-                    start_time = rec.get('start_time', 'Unknown')
-                    if 'T' in str(start_time):
-                        start_time = datetime.fromisoformat(start_time.replace('Z', '+00:00')).strftime('%H:%M:%S')
-                    print(f"  • {rec['filename']} - {size_mb}MB - {rec['recording_date']} {start_time}")
-                
-                if len(recordings.data) > 10:
-                    print(f"  ... and {len(recordings.data) - 10} more")
-            else:
-                print("\n📊 No recordings found in database")
-                
-        except Exception as e:
-            logger.warning(f"Could not fetch recordings from database: {e}")
-        
-        return 0
-        
     except Exception as e:
-        logger.error(f"Upload process failed: {e}")
-        return 1
+        logger.warning(f"Could not fetch recordings from database: {e}")
 
 if __name__ == "__main__":
-    sys.exit(main()) 
+    main() 
