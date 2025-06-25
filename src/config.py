@@ -13,7 +13,7 @@ load_dotenv()
 
 def get_env_var(name: str, default=None, required=False, var_type=str):
     """Get environment variable with validation and type conversion."""
-    value = os.getenv(name, default)
+    value = os.getenv(name)
     
     if required and value is None:
         raise ValueError(f"Required environment variable {name} is not set")
@@ -23,7 +23,7 @@ def get_env_var(name: str, default=None, required=False, var_type=str):
         
     # Type conversion
     if var_type == bool:
-        return value.lower() in ('true', '1', 'yes', 'on')
+        return str(value).lower() in ('true', '1', 'yes', 'on')
     elif var_type == int:
         try:
             return int(value)
