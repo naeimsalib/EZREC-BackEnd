@@ -232,7 +232,7 @@ class CameraInterface:
             # Generate filename if not provided
             if not filename:
                 timestamp = time.strftime("%Y%m%d_%H%M%S")
-                filename = f"recording_{timestamp}.mp4"
+                filename = f"recording_{timestamp}_manual.mp4"
                 
             self.recording_path = os.path.join(self.output_dir, filename)
             self.logger.info(f"Starting recording: {self.recording_path}")

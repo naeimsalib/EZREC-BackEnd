@@ -63,28 +63,41 @@ def calculate_file_hash(filepath):
 
 def parse_recording_filename(filename):
     """Parse recording filename to extract booking info."""
-    # Format: rec_BOOKING-ID_YYYYMMDD_HHMMSS.mp4
+    # Support both formats:
+    # New format: recording_YYYYMMDD_HHMMSS_BOOKING-ID.mp4
+    # Old format: rec_BOOKING-ID_YYYYMMDD_HHMMSS.mp4
     try:
         parts = filename.replace('.mp4', '').split('_')
-        if len(parts) >= 4 and parts[0] == 'rec':
+        
+        # New format: recording_YYYYMMDD_HHMMSS_BOOKING-ID.mp4
+        if len(parts) >= 4 and parts[0] == 'recording':
+            date_str = parts[1]  # YYYYMMDD
+            time_str = parts[2]  # HHMMSS
+            booking_id = parts[3]  # BOOKING-ID
+            
+        # Old format: rec_BOOKING-ID_YYYYMMDD_HHMMSS.mp4
+        elif len(parts) >= 4 and parts[0] == 'rec':
             booking_id = parts[1]
             date_str = parts[2]  # YYYYMMDD
             time_str = parts[3]  # HHMMSS
             
-            # Convert to proper datetime
-            recording_date = datetime.strptime(date_str, '%Y%m%d').strftime('%Y-%m-%d')
-            recording_time = datetime.strptime(time_str, '%H%M%S').strftime('%H:%M:%S')
+        else:
+            return None
             
-            # Create start_time as full timestamp
-            start_time = datetime.strptime(f"{date_str} {time_str}", '%Y%m%d %H%M%S')
-            
-            return {
-                'booking_id': booking_id,
-                'date': recording_date,
-                'time': recording_time,
-                'start_time': start_time,
-                'filename': filename
-            }
+        # Convert to proper datetime
+        recording_date = datetime.strptime(date_str, '%Y%m%d').strftime('%Y-%m-%d')
+        recording_time = datetime.strptime(time_str, '%H%M%S').strftime('%H:%M:%S')
+        
+        # Create start_time as full timestamp
+        start_time = datetime.strptime(f"{date_str} {time_str}", '%Y%m%d %H%M%S')
+        
+        return {
+            'booking_id': booking_id,
+            'date': recording_date,
+            'time': recording_time,
+            'start_time': start_time,
+            'filename': filename
+        }
     except Exception as e:
         logger.warning(f"Could not parse filename {filename}: {e}")
     

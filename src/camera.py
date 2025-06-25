@@ -157,7 +157,7 @@ class CameraService:
         try:
             self.current_booking = booking
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"rec_{booking['id']}_{timestamp}.mp4"
+            filename = f"recording_{timestamp}_{booking['id']}.mp4"
             
             self.interface.start_recording(filename)
             self.is_recording = True
