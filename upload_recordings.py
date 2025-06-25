@@ -28,6 +28,9 @@ except ImportError as e:
     logger.error(f"Storage3 not available: {e}")
     logger.error("Install with: pip install storage3")
 
+# File cleanup configuration - set DELETE_AFTER_UPLOAD=false in environment to keep local files
+DELETE_AFTER_UPLOAD = os.getenv("DELETE_AFTER_UPLOAD", "true").lower() in ('true', '1', 'yes', 'on')
+
 def get_storage_client():
     """Create and return Supabase Storage client."""
     if not STORAGE_AVAILABLE:
@@ -284,6 +287,17 @@ def upload_all_existing_recordings():
         if db_result:
             uploaded_count += 1
             total_size += video_file.stat().st_size
+            
+            # Remove local file after successful upload to database (if enabled)
+            if DELETE_AFTER_UPLOAD:
+                try:
+                    video_file.unlink()  # Delete the file
+                    logger.info(f"🗑️  Local file removed after successful upload: {video_file.name}")
+                except Exception as e:
+                    logger.warning(f"⚠️  Failed to remove local file {video_file.name}: {e}")
+                    # Don't fail the upload just because we couldn't delete the file
+            else:
+                logger.info(f"📁 Local file preserved (DELETE_AFTER_UPLOAD=false): {video_file.name}")
         else:
             failed_count += 1
     
@@ -299,7 +313,10 @@ def upload_all_existing_recordings():
         if storage_client:
             print(f"🌐 Files uploaded to Supabase Storage: videos/{USER_ID}/")
         else:
-            print("⚠️  Files remain local - install storage3 library for cloud storage")
+            if DELETE_AFTER_UPLOAD:
+                print("🗑️  Local files removed after successful upload to database")
+            else:
+                print("📁 Local files preserved - set DELETE_AFTER_UPLOAD=true to auto-clean")
     
     if failed_count > 0:
         print(f"⚠️  {failed_count} recordings failed to upload")
