@@ -135,12 +135,10 @@ install_system_deps() {
         liblapack-dev \
         gfortran
     
-    # Additional Pi-specific packages
+    # Additional Pi-specific packages (optional - handle conflicts gracefully)
     if [[ -f /etc/rpi-issue ]]; then
-        apt install -y \
-            libraspberrypi-bin \
-            raspi-config \
-            rpi-update
+        # Try to install Pi-specific packages, but continue if they fail
+        apt install -y raspi-config 2>/dev/null || warning "Some Pi-specific packages couldn't be installed (this is OK)"
     fi
     
     success "System dependencies installed"
