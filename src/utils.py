@@ -26,14 +26,6 @@ from config import (
     LOG_LEVEL, DEBUG
 )
 
-# Supabase client setup with error handling
-try:
-    from supabase import create_client, Client
-    supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-except Exception as e:
-    print(f"Warning: Failed to initialize Supabase client: {e}")
-    supabase = None
-
 # Global logger instance
 logger = None
 
@@ -104,6 +96,20 @@ def setup_logging():
 
 # Initialize logging on import
 logger = setup_logging()
+
+# Supabase client setup with error handling
+try:
+    from supabase import create_client, Client
+    
+    # Create a simple, compatible client for version 2.0.3
+    # Use positional arguments as documented in the official docs
+    supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+    
+    logger.info("Supabase client initialized successfully")
+        
+except Exception as e:
+    logger.warning(f"Failed to initialize Supabase client: {e}")
+    supabase = None
 
 def get_system_metrics() -> Dict[str, Any]:
     """Collect comprehensive system metrics."""
