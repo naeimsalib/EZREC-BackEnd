@@ -15,6 +15,12 @@ Based on your logs, there are two critical issues:
 - **Error**: `WARNING: Invalid end_time format in booking: 01:02`
 - **Root Cause**: Booking data uses simple time format (HH:MM) but code expected ISO timestamps
 
+### 3. Missing OpenCV (CRITICAL)
+
+- **Error**: `ModuleNotFoundError: No module named 'cv2'`
+- **Root Cause**: OpenCV not installed in system or virtual environment
+- **Impact**: Camera interface cannot initialize properly
+
 ## ✅ Fixes Applied
 
 ### Recording Loop Fix
@@ -37,177 +43,209 @@ Based on your logs, there are two critical issues:
 - Test frame capture during initialization to verify camera functionality
 - Graceful handling of initialization failures
 
-## 🔧 Immediate Actions Required
+### OpenCV Installation Fix
 
-### 1. Restart EZREC Service
+- Added system-level OpenCV installation (`python3-opencv`)
+- Added virtual environment OpenCV installation (`opencv-python`)
+- Ensures camera interface can use both Pi Camera and USB cameras
 
-Run the provided restart script on your Raspberry Pi:
+## 🔧 Manual Installation Steps
+
+If you need to install OpenCV manually:
 
 ```bash
-cd /home/michomanoly14892/code/EZREC-BackEnd
-./restart_ezrec.sh
+# Install system-level OpenCV
+sudo apt update
+sudo apt install python3-opencv -y
+
+# Install in virtual environment (if using one)
+sudo -u ezrec /opt/ezrec-backend/venv/bin/pip install opencv-python
+
+# Restart the service
+sudo systemctl restart ezrec-backend
 ```
 
-This script will:
+## 🔧 Quick Recovery Steps
 
-- Safely stop the service
-- Kill any stuck processes
-- Clear problematic temporary files
-- Test camera access
-- Restart the service with fresh state
+### 1. Use the Restart Script
+
+```bash
+chmod +x restart_ezrec.sh
+sudo ./restart_ezrec.sh
+```
 
 ### 2. Run Camera Diagnostics
 
-If issues persist, run the comprehensive diagnostic:
-
 ```bash
-cd /home/michomanoly14892/code/EZREC-BackEnd
+chmod +x camera_diagnostic.py
 python3 camera_diagnostic.py
 ```
 
-This will check:
-
-- System information and OS version
-- Video device detection (/dev/video\*)
-- Camera module status and drivers
-- File permissions and user groups
-- Configuration files
-- Python camera library tests
-- EZREC-specific camera interface
-
-## 🔍 Common Camera Issues & Solutions
-
-### No Video Devices Found
+### 3. Check Service Status
 
 ```bash
-# Check for video devices
+sudo systemctl status ezrec-backend
+sudo journalctl -u ezrec-backend -f
+```
+
+## 📋 Verification Steps
+
+After applying fixes, verify everything is working:
+
+### 1. Check OpenCV Installation
+
+```bash
+# Test system OpenCV
+python3 -c "import cv2; print(f'OpenCV {cv2.__version__} installed')"
+
+# Test virtual environment OpenCV
+sudo -u ezrec /opt/ezrec-backend/venv/bin/python -c "import cv2; print(f'OpenCV {cv2.__version__} in venv')"
+```
+
+### 2. Check Camera Detection
+
+```bash
+# Test camera hardware
+libcamera-hello --list-cameras
+
+# Test camera access
+python3 camera_diagnostic.py
+```
+
+### 3. Monitor Service Logs
+
+```bash
+# Check for errors
+sudo journalctl -u ezrec-backend --since "5 minutes ago"
+
+# Look for success messages
+sudo journalctl -u ezrec-backend | grep -E "(Camera.*initialized|Recording.*started|started successfully)"
+```
+
+## 🐛 Debugging Commands
+
+### Camera Hardware Debugging
+
+```bash
+# List video devices
 ls -la /dev/video*
 
-# If none found, check USB connections
-lsusb
+# Check user permissions
+groups | grep video
 
-# For Pi Camera, check boot config
-sudo cat /boot/config.txt | grep camera
-sudo raspi-config  # Enable camera if needed
-```
-
-### Permission Issues
-
-```bash
-# Add user to video group
-sudo usermod -a -G video $USER
-
-# Check permissions
-ls -la /dev/video0
-groups
-```
-
-### Pi Camera Not Detected
-
-```bash
-# Check Pi Camera status
+# Test Pi Camera specifically
 vcgencmd get_camera
-
-# Check camera cable connection
-# Ensure /boot/config.txt has: camera_auto_detect=1
 ```
 
-### USB Camera Issues
-
-```bash
-# Test USB camera directly
-v4l2-ctl --device=/dev/video0 --list-formats
-v4l2-ctl --device=/dev/video0 --list-framesizes=YUYV
-
-# Check USB power
-# Try different USB ports
-# Check dmesg for USB errors
-dmesg | grep -i usb | tail -10
-```
-
-## 📊 Monitoring
-
-### Real-time Logs
-
-```bash
-# Monitor service logs
-sudo journalctl -u ezrec-backend -f
-
-# Monitor with timestamp
-sudo journalctl -u ezrec-backend -f --since "now"
-```
-
-### Service Status
+### Service Debugging
 
 ```bash
 # Check service status
-sudo systemctl status ezrec-backend
+sudo systemctl status ezrec-backend --no-pager -l
 
-# Check if process is running
-ps aux | grep orchestrator
+# View recent logs
+sudo journalctl -u ezrec-backend --lines=50 --no-pager
 
-# Check system resources
-top | grep python
+# Check configuration
+sudo -u ezrec cat /opt/ezrec-backend/.env
 ```
 
-## 🚨 Emergency Recovery
-
-If the service becomes completely unresponsive:
-
-### 1. Force Stop Everything
+### Python Environment Debugging
 
 ```bash
-sudo systemctl stop ezrec-backend
-sudo pkill -f orchestrator.py
-sudo pkill -f ezrec
-```
-
-### 2. Clear All State
-
-```bash
-sudo rm -f /opt/ezrec-backend/temp/*
-sudo rm -f /opt/ezrec-backend/logs/*.log
-```
-
-### 3. Test Camera Manually
-
-```bash
-# Test with Python
-python3 -c "
-import cv2
-cap = cv2.VideoCapture(0)
-if cap.isOpened():
-    ret, frame = cap.read()
-    print('Camera OK' if ret else 'Camera Failed')
-    cap.release()
-else:
-    print('Cannot open camera')
+# Test imports
+sudo -u ezrec /opt/ezrec-backend/venv/bin/python -c "
+import cv2, numpy, picamera2
+print('All camera modules imported successfully')
 "
+
+# Check package versions
+sudo -u ezrec /opt/ezrec-backend/venv/bin/pip list | grep -E "(opencv|numpy|picamera)"
 ```
 
-### 4. Restart Fresh
+## 📊 Expected Results After Fixes
+
+### Successful Service Startup
+
+```
+✓ Camera initialized successfully
+✓ All worker threads started
+✓ No health check failures
+✓ Clean log output without retry loops
+```
+
+### Successful Camera Test
+
+```
+✓ Pi Camera: Working - Frame shape: (480, 640, 4)
+✓ OpenCV version: 4.8.1.78
+✓ Camera health check passed
+```
+
+### Successful Recording
+
+```
+✓ Recording started successfully
+✓ No "Camera not ready" errors
+✓ Time format validation passes
+```
+
+## 🆘 Emergency Recovery
+
+If the service is completely broken:
 
 ```bash
-sudo systemctl start ezrec-backend
-sudo systemctl status ezrec-backend
+# Stop everything
+sudo systemctl stop ezrec-backend
+
+# Clean restart
+sudo ./restart_ezrec.sh
+
+# If still broken, reinstall OpenCV
+sudo apt install --reinstall python3-opencv
+sudo -u ezrec /opt/ezrec-backend/venv/bin/pip install --force-reinstall opencv-python
+
+# Restart service
+sudo systemctl restart ezrec-backend
 ```
 
-## 📈 Expected Improvements
+## 📞 Getting Help
 
-After applying the fixes and restarting:
+When reporting issues, include:
 
-1. **No more spam loops**: Recording failures will be rate-limited
-2. **Better error messages**: Specific reasons for camera failures
-3. **Intelligent retries**: Exponential backoff prevents system overload
-4. **Time format compatibility**: Handles both simple and ISO time formats
-5. **Enhanced diagnostics**: Better health checks and logging
+1. **System Information**:
 
-## 📞 Next Steps
+   ```bash
+   uname -a
+   python3 --version
+   ```
 
-1. **Run `restart_ezrec.sh`** to apply fixes immediately
-2. **Monitor logs** for 5-10 minutes to ensure stability
-3. **Run diagnostics** if problems persist
-4. **Check camera hardware** if software tests fail
-5. **Update/create new bookings** to test recording functionality
+2. **Camera Diagnostic Output**:
 
-The system should now be much more stable and provide clearer error messages for any remaining issues.
+   ```bash
+   python3 camera_diagnostic.py
+   ```
+
+3. **Service Logs**:
+
+   ```bash
+   sudo journalctl -u ezrec-backend --lines=100 --no-pager
+   ```
+
+4. **OpenCV Status**:
+   ```bash
+   python3 -c "import cv2; print(cv2.__version__)"
+   sudo -u ezrec /opt/ezrec-backend/venv/bin/python -c "import cv2; print(cv2.__version__)"
+   ```
+
+## 📝 Notes
+
+- The Pi Camera works with picamera2 library (primary method)
+- OpenCV provides USB camera fallback support
+- Both system and virtual environment installations are needed for full compatibility
+- Camera permissions require user to be in 'video' group
+- Service runs as 'ezrec' user with restricted permissions
+
+---
+
+**Updated**: 2025-06-25 - Added OpenCV installation requirements and verification steps

@@ -116,6 +116,10 @@ install_system_deps() {
         ffmpeg \
         v4l-utils
     
+    # CRITICAL: Install OpenCV system package for camera support
+    log "Installing OpenCV for Python..."
+    apt install -y python3-opencv
+    
     # Additional Pi-specific packages (optional - handle conflicts gracefully)
     if [[ -f /etc/rpi-issue ]]; then
         # Try to install Pi-specific packages, but continue if they fail
@@ -230,6 +234,10 @@ setup_python_env() {
     # Install Python dependencies
     log "Installing Python packages from requirements.txt..."
     sudo -u "$SERVICE_USER" "$INSTALL_DIR/venv/bin/pip" install -r requirements.txt
+    
+    # CRITICAL: Install OpenCV in virtual environment for full compatibility
+    log "Installing OpenCV in virtual environment..."
+    sudo -u "$SERVICE_USER" "$INSTALL_DIR/venv/bin/pip" install opencv-python
     
     # Test critical imports
     log "Testing Python environment..."
