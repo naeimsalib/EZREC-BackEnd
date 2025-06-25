@@ -246,37 +246,55 @@ class EZRECOrchestrator:
             os.makedirs(RECORDING_DIR, exist_ok=True)
             
             try:
-                # Record video
-                self.logger.info(f"📹 Recording to: {video_path}")
-                success = self.camera.record_video(video_path, duration_seconds)
+                # Start recording
+                self.logger.info(f"📹 Starting recording to: {video_path}")
+                actual_path = self.camera.start_recording(filename)
                 
-                if success and os.path.exists(video_path):
-                    self.logger.info(f"✅ Recording completed: {filename}")
+                if actual_path:
+                    self.logger.info(f"✅ Recording started successfully")
                     
-                    # FIXED: Upload to Supabase Storage and videos table
-                    self.logger.info("📤 Uploading video to Supabase...")
-                    upload_result = upload_video_to_supabase(video_path, booking_id)
+                    # Wait for recording duration
+                    self.logger.info(f"⏰ Recording for {duration_seconds:.0f} seconds...")
+                    if self.shutdown_event.wait(duration_seconds):
+                        # Shutdown requested during recording
+                        self.logger.info("🛑 Shutdown requested, stopping recording...")
+                        self.camera.stop_recording()
+                        return False
                     
-                    if upload_result.get('success'):
-                        self.logger.info(f"✅ Video uploaded successfully")
-                        self.logger.info(f"   Storage Path: {upload_result.get('storage_path')}")
-                        self.logger.info(f"   Video ID: {upload_result.get('video_id')}")
-                        self.logger.info(f"   Table: {upload_result.get('table', 'videos')}")
+                    # Stop recording
+                    self.logger.info("🛑 Stopping recording...")
+                    final_path = self.camera.stop_recording()
+                    
+                    if final_path and os.path.exists(final_path):
+                        self.logger.info(f"✅ Recording completed: {os.path.basename(final_path)}")
                         
-                        # Optionally delete local file after successful upload
-                        if os.getenv("DELETE_AFTER_UPLOAD", "false").lower() == "true":
-                            try:
-                                os.remove(video_path)
-                                self.logger.info(f"🗑️ Deleted local file: {filename}")
-                            except Exception as e:
-                                self.logger.warning(f"⚠️ Could not delete local file: {e}")
+                        # FIXED: Upload to Supabase Storage and videos table
+                        self.logger.info("📤 Uploading video to Supabase...")
+                        upload_result = upload_video_to_supabase(final_path, booking_id)
+                        
+                        if upload_result.get('success'):
+                            self.logger.info(f"✅ Video uploaded successfully")
+                            self.logger.info(f"   Storage Path: {upload_result.get('storage_path')}")
+                            self.logger.info(f"   Video ID: {upload_result.get('video_id')}")
+                            self.logger.info(f"   Table: {upload_result.get('table', 'videos')}")
+                            
+                            # Optionally delete local file after successful upload
+                            if os.getenv("DELETE_AFTER_UPLOAD", "false").lower() == "true":
+                                try:
+                                    os.remove(final_path)
+                                    self.logger.info(f"🗑️ Deleted local file: {os.path.basename(final_path)}")
+                                except Exception as e:
+                                    self.logger.warning(f"⚠️ Could not delete local file: {e}")
+                        else:
+                            self.logger.warning(f"⚠️ Video upload failed: {upload_result.get('error')}")
+                            self.logger.info(f"📁 Video saved locally: {final_path}")
+                        
+                        return True
                     else:
-                        self.logger.warning(f"⚠️ Video upload failed: {upload_result.get('error')}")
-                        self.logger.info(f"📁 Video saved locally: {video_path}")
-                    
-                    return True
+                        self.logger.error(f"❌ Recording failed or file not created")
+                        return False
                 else:
-                    self.logger.error(f"❌ Recording failed or file not created")
+                    self.logger.error(f"❌ Failed to start recording")
                     return False
                     
             finally:
