@@ -1,77 +1,121 @@
 #!/usr/bin/env python3
 """
-Create Simple Test Booking for EZREC
-Works with the actual database schema (including title column)
+Create a simple test booking for EZREC with timezone awareness
 """
-import os
 import sys
+import os
 import uuid
 from datetime import datetime, timedelta
+import pytz
 
-# Add src directory to path
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'src'))
+# Add the src directory to Python path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
-from utils import supabase, logger
-from config import CAMERA_ID, USER_ID
+try:
+    from utils import supabase, logger
+    from config import CAMERA_ID, USER_ID
+except ImportError as e:
+    print(f"❌ Import error: {e}")
+    print("Make sure you're running this from the EZREC directory")
+    sys.exit(1)
 
-def create_simple_test_booking():
-    """Create a test booking that starts in 2 minutes."""
+def get_local_timezone():
+    """Get the system's local timezone"""
     try:
-        now = datetime.now()
-        start_time = now + timedelta(minutes=2)
-        end_time = start_time + timedelta(minutes=1)
+        # Try to get timezone from system
+        with open('/etc/timezone', 'r') as f:
+            tz_name = f.read().strip()
+        return pytz.timezone(tz_name)
+    except:
+        # Fallback to UTC if can't determine
+        return pytz.UTC
+
+def create_timezone_aware_booking():
+    """Create a test booking with proper timezone handling"""
+    
+    if not supabase:
+        print("❌ Supabase connection not available")
+        return False
+    
+    try:
+        # Get local timezone
+        local_tz = get_local_timezone()
         
-        # Generate proper UUID for the booking ID
+        # Create booking for 2 minutes from now
+        now_local = datetime.now(local_tz)
+        start_time = now_local + timedelta(minutes=2)
+        end_time = start_time + timedelta(minutes=1)  # 1 minute recording
+        
+        # Generate unique booking ID
         booking_id = str(uuid.uuid4())
         
-        # Use the actual database schema (with title column)
+        # Create booking data
         booking_data = {
-            'id': booking_id,
-            'user_id': USER_ID,
-            'camera_id': CAMERA_ID,
-            'date': start_time.strftime('%Y-%m-%d'),
-            'start_time': start_time.strftime('%H:%M'),
-            'end_time': end_time.strftime('%H:%M'),
-            'status': 'confirmed',
-            'title': f'Test Recording {now.strftime("%H:%M")}',  # Required column
-            'description': 'Automated test booking for storage upload verification',
-            'booking_type': 'standard'
+            "id": booking_id,
+            "user_id": USER_ID,
+            "camera_id": CAMERA_ID,
+            "date": start_time.strftime("%Y-%m-%d"),
+            "start_time": start_time.strftime("%H:%M"),
+            "end_time": end_time.strftime("%H:%M"),
+            "status": "confirmed",
+            "title": f"Test Recording - {start_time.strftime('%H:%M')}",
+            "description": "Automated test booking for EZREC system verification",
+            "timezone": str(local_tz),
+            "created_at": now_local.isoformat()
         }
         
-        print(f"📅 Creating test booking:")
-        print(f"   ID: {booking_data['id']}")
-        print(f"   Camera: {CAMERA_ID}")
-        print(f"   Date: {booking_data['date']}")
-        print(f"   Time: {booking_data['start_time']} - {booking_data['end_time']}")
-        print(f"   Recording starts in 2 minutes...")
+        print("🎬 Creating timezone-aware test booking...")
+        print(f"📅 Date: {booking_data['date']}")
+        print(f"⏰ Time: {booking_data['start_time']} - {booking_data['end_time']} ({local_tz})")
+        print(f"📹 Camera: {CAMERA_ID}")
+        print(f"🆔 Booking ID: {booking_id}")
         
         # Insert booking
-        response = supabase.table('bookings').insert(booking_data).execute()
+        response = supabase.table("bookings").insert(booking_data).execute()
         
         if response.data:
-            print(f"✅ Test booking created successfully!")
-            print(f"📹 Recording will start at {start_time.strftime('%H:%M')} and last 1 minute")
-            print(f"\n🔍 Monitor with: sudo journalctl -u ezrec-backend -f")
+            print("✅ Test booking created successfully!")
+            print(f"⏳ Recording will start in 2 minutes at {start_time.strftime('%H:%M:%S')}")
+            print("\n📊 Monitor the recording:")
+            print("sudo journalctl -u ezrec-backend -f")
+            print("\n📂 Check recordings after completion:")
+            print("ls -la /opt/ezrec-backend/temp/")
+            
             return True
         else:
-            print(f"❌ Failed to create booking")
+            print("❌ Failed to create booking - no data returned")
             return False
             
     except Exception as e:
-        print(f"❌ Error creating test booking: {e}")
+        print(f"❌ Error creating booking: {e}")
+        logger.error(f"Booking creation failed: {e}")
         return False
 
-if __name__ == "__main__":
-    print("🎬 EZREC Simple Test Booking Creator")
+def main():
+    """Main function"""
+    print("🎯 EZREC Timezone-Aware Test Booking Creator")
     print("=" * 50)
     
-    success = create_simple_test_booking()
+    # Show current system time info
+    local_tz = get_local_timezone()
+    now_local = datetime.now(local_tz)
+    now_utc = datetime.now(pytz.UTC)
+    
+    print(f"🕐 Current local time: {now_local.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+    print(f"🌍 Current UTC time: {now_utc.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+    print(f"🗺️  System timezone: {local_tz}")
+    print()
+    
+    # Create the booking
+    success = create_timezone_aware_booking()
     
     if success:
-        print("\n🎯 Next steps:")
-        print("1. Wait 2 minutes for recording to start")
-        print("2. Recording will last 1 minute")
-        print("3. Check for new file in /opt/ezrec-backend/recordings/")
-        print("4. Run upload script to test storage upload")
+        print("\n🎉 Success! Your EZREC system will start recording in 2 minutes.")
+        print("Watch the logs to see the new filename format in action!")
     else:
-        print("\n❌ Booking creation failed. Check your Supabase connection.") 
+        print("\n💥 Failed to create test booking. Check the error messages above.")
+    
+    return 0 if success else 1
+
+if __name__ == "__main__":
+    sys.exit(main()) 
