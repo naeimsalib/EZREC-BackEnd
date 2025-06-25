@@ -164,8 +164,7 @@ def upload_recording_to_database(recording_path, storage_result, booking_info=No
             'fps': 30,
             'upload_status': 'uploaded' if storage_result.get('success') else 'local',
             'uploaded_at': datetime.now().isoformat() if storage_result.get('success') else None,
-            'public_url': storage_result.get('public_url'),
-            'storage_path': storage_result.get('storage_path'),
+            'upload_url': storage_result.get('public_url'),  # Changed from public_url to upload_url
             'metadata': {
                 'file_size_mb': round(file_stats.st_size / (1024*1024), 2),
                 'camera_type': 'pi_camera',
@@ -173,6 +172,7 @@ def upload_recording_to_database(recording_path, storage_result, booking_info=No
                 'fps': 30,
                 'bitrate': 10000000,
                 'format': 'h264',
+                'storage_path': storage_result.get('storage_path'),  # Moved to metadata
                 'uploaded_to_storage': storage_result.get('success', False)
             }
         }
