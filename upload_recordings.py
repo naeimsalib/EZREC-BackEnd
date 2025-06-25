@@ -227,10 +227,9 @@ def upload_all_existing_recordings():
         logger.error("Cannot proceed without recordings table")
         return
     
-    # Initialize storage client
-    storage_client = get_storage_client()
-    if not storage_client:
-        logger.error("❌ Cannot initialize storage client - uploads will be metadata only")
+    # Skip storage client initialization for now to avoid hanging
+    storage_client = None
+    logger.info("⚠️  Skipping storage client - uploading metadata only to database")
     
     recording_dir = Path(RECORDING_DIR)
     
@@ -338,11 +337,10 @@ def main():
     
     print("✅ Supabase connection successful")
     
-    # Check storage bucket
+    # Skip bucket check for now to avoid hanging - proceed with database-only upload
     if STORAGE_AVAILABLE:
-        bucket_exists = check_storage_bucket()
-        if not bucket_exists:
-            print("⚠️  Videos bucket not found - uploads will be metadata only")
+        print("⚠️  Skipping storage bucket check - proceeding with database upload")
+        print("   📝 Recordings will be stored in database with local file paths")
     
     # Start upload process
     upload_all_existing_recordings()
