@@ -435,43 +435,50 @@ class SupabaseManager:
         self.supabase = supabase  # Add this for backward compatibility
         
     async def execute_query(self, query: str, params: Dict[str, Any] = None):
-        """Execute a raw SQL query with proper WHERE clause parsing."""
+        """Execute a raw SQL query with proper WHERE clause parsing - ENHANCED VERSION."""
         try:
             if not self.client:
                 raise Exception("Supabase client not available")
             
+            # Clean and normalize the query
+            clean_query = query.strip()
+            logger.info(f"🔍 Processing query: {clean_query[:50]}...")
+            
             # For simple table queries, parse and execute
-            if query.upper().startswith('SELECT'):
+            if clean_query.upper().startswith('SELECT'):
+                logger.info("✅ Confirmed SELECT query detected")
+                
                 # Handle bookings queries with WHERE conditions
-                if 'FROM bookings' in query:
+                if 'FROM bookings' in clean_query:
+                    logger.info("📋 Processing bookings table query")
                     query_builder = self.client.table("bookings").select("*")
                     
                     # Enhanced parsing - use regex for dynamic date/user_id matching
                     import re
                     
                     # Parse date condition dynamically
-                    date_match = re.search(r"date\s*=\s*'([^']+)'", query, re.IGNORECASE)
+                    date_match = re.search(r"date\s*=\s*'([^']+)'", clean_query, re.IGNORECASE)
                     if date_match:
                         date_value = date_match.group(1)
                         query_builder = query_builder.eq("date", date_value)
                         logger.info(f"📅 Filtering by date: {date_value}")
                     
                     # Parse user_id condition dynamically
-                    user_id_match = re.search(r"user_id\s*=\s*'([^']+)'", query, re.IGNORECASE)
+                    user_id_match = re.search(r"user_id\s*=\s*'([^']+)'", clean_query, re.IGNORECASE)
                     if user_id_match:
                         user_id_value = user_id_match.group(1)
                         query_builder = query_builder.eq("user_id", user_id_value)
                         logger.info(f"👤 Filtering by user_id: {user_id_value}")
                     
                     # Parse status condition
-                    status_match = re.search(r"status\s*=\s*'([^']+)'", query, re.IGNORECASE)
+                    status_match = re.search(r"status\s*=\s*'([^']+)'", clean_query, re.IGNORECASE)
                     if status_match:
                         status_value = status_match.group(1)
                         query_builder = query_builder.eq("status", status_value)
                         logger.info(f"📊 Filtering by status: {status_value}")
                     
                     # Add ordering
-                    if "ORDER BY start_time ASC" in query:
+                    if "ORDER BY start_time ASC" in clean_query:
                         query_builder = query_builder.order("start_time", desc=False)
                         logger.info("🔄 Ordering by start_time ASC")
                     
@@ -479,17 +486,21 @@ class SupabaseManager:
                     logger.info(f"✅ Bookings query executed successfully - returned {len(response.data)} results")
                     return response.data
                     
-                elif 'FROM videos' in query:
+                elif 'FROM videos' in clean_query:
+                    logger.info("🎥 Processing videos table query")
                     response = self.client.table("videos").select("*").execute()
+                    logger.info(f"✅ Videos query executed - returned {len(response.data)} results")
                     return response.data
-                elif 'FROM system_status' in query:
+                elif 'FROM system_status' in clean_query:
+                    logger.info("📊 Processing system_status table query")
                     response = self.client.table("system_status").select("*").execute()
+                    logger.info(f"✅ System status query executed - returned {len(response.data)} results")
                     return response.data
                 else:
-                    logger.warning(f"❌ Unsupported query format: {query}")
+                    logger.warning(f"❌ Unsupported table in query: {clean_query}")
                     return []
             else:
-                logger.warning(f"❌ Only SELECT queries supported. Received: {query}")
+                logger.warning(f"❌ Only SELECT queries supported. Received: {clean_query}")
                 return []
                 
         except Exception as e:
