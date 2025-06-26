@@ -252,6 +252,7 @@ class EZRECMain:
         """Check if recording should start for this booking"""
         try:
             if self.recording_active:
+                self.logger.debug(f"🔄 Already recording, skipping booking {booking.get('id')}")
                 return False  # Already recording
             
             est = pytz.timezone('America/New_York')
@@ -259,6 +260,8 @@ class EZRECMain:
             
             # Parse booking start time (handle both HH:MM and HH:MM:SS formats)
             start_time_str = booking.get("start_time", "")
+            end_time_str = booking.get("end_time", "")
+            
             try:
                 # Try HH:MM:SS format first
                 booking_start = datetime.strptime(start_time_str, "%H:%M:%S").time()
@@ -267,16 +270,53 @@ class EZRECMain:
                     # Try HH:MM format
                     booking_start = datetime.strptime(start_time_str, "%H:%M").time()
                 except ValueError:
-                    self.logger.error(f"❌ Invalid time format: {start_time_str}")
+                    self.logger.error(f"❌ Invalid start time format: {start_time_str}")
+                    return False
+
+            try:
+                # Try HH:MM:SS format first for end time
+                booking_end = datetime.strptime(end_time_str, "%H:%M:%S").time()
+            except ValueError:
+                try:
+                    # Try HH:MM format
+                    booking_end = datetime.strptime(end_time_str, "%H:%M").time()
+                except ValueError:
+                    self.logger.error(f"❌ Invalid end time format: {end_time_str}")
                     return False
             
             current_time_only = current_time.time()
             
-            # Check if it's time to start (within 1 minute window)
-            time_diff = (datetime.combine(datetime.today(), current_time_only) - 
-                        datetime.combine(datetime.today(), booking_start)).total_seconds()
+            # Calculate time differences for debugging
+            start_diff = (datetime.combine(datetime.today(), current_time_only) - 
+                         datetime.combine(datetime.today(), booking_start)).total_seconds()
+            end_diff = (datetime.combine(datetime.today(), current_time_only) - 
+                       datetime.combine(datetime.today(), booking_end)).total_seconds()
             
-            return -60 <= time_diff <= 60  # 1 minute window
+            # Log detailed timing info
+            booking_id = booking.get('id')
+            self.logger.info(f"🕐 Booking {booking_id}: {booking.get('date')} {start_time_str}-{end_time_str}")
+            self.logger.info(f"⏰ Current time: {current_time_only}, Start diff: {start_diff:.1f}s, End diff: {end_diff:.1f}s")
+            
+            # Recording should start if:
+            # 1. Current time is within 60 seconds BEFORE the start time (pre-start window)
+            # 2. OR current time is BETWEEN start and end time (active period)
+            pre_start_window = -60 <= start_diff <= 0  # Up to 1 minute before start
+            active_period = start_diff >= 0 and end_diff <= 0  # Between start and end
+            
+            should_start = pre_start_window or active_period
+            
+            if should_start:
+                if pre_start_window:
+                    self.logger.info(f"🎬 SHOULD START (Pre-start): {booking_id} starts in {abs(start_diff):.1f}s")
+                else:
+                    self.logger.info(f"🎬 SHOULD START (Active): {booking_id} started {start_diff:.1f}s ago, ends in {abs(end_diff):.1f}s")
+            else:
+                if start_diff < -60:
+                    self.logger.debug(f"⏱️  Too early: {booking_id} starts in {abs(start_diff):.1f}s (>60s)")
+                elif end_diff > 0:
+                    self.logger.debug(f"⏱️  Too late: {booking_id} ended {end_diff:.1f}s ago")
+            
+            return should_start
             
         except Exception as e:
             self.logger.error(f"❌ Error checking start time: {e}")
