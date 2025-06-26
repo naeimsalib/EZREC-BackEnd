@@ -1,33 +1,46 @@
-# EZREC Backend Dependencies (Raspberry Pi Optimized)
-# Production-ready with Picamera2 and system integration
+# EZREC Backend Requirements
+# Core dependencies for soccer recording system
 
-# Core Dependencies
-python-dotenv==1.0.0
-psutil==5.9.8
-pytz==2024.1
+# Supabase integration
+supabase>=2.0.0
+postgrest>=1.0.0
 
-# Supabase Stack - Main package and storage
-supabase==2.2.1
-storage3==0.7.7
-postgrest==0.12.0
-gotrue==1.3.0
+# Web framework and HTTP
+requests>=2.25.0
+httpx>=0.25.0
 
-# HTTP Client Stack - Compatible versions
-httpx==0.24.1
-httpcore==0.17.3
-h11==0.14.0
-certifi==2023.7.22
+# Camera and video processing (Picamera2 ecosystem)
+picamera2>=0.3.0
+opencv-python>=4.5.0
+numpy>=1.21.0
+pillow>=8.0.0
 
-# Computer Vision & Media Processing
-opencv-python==4.8.1.78
-numpy==1.26.4
+# System monitoring and utilities
+psutil>=5.8.0
+pytz>=2021.1
 
-# File handling and utilities
-pathlib2==2.3.7
-typing-extensions==4.8.0
+# Development and logging
+python-dotenv>=0.19.0
 
-# Async support
-asyncio-mqtt==0.16.1
+# Additional Picamera2 dependencies that might be needed
+av>=8.0.0
+simplejpeg>=1.5.0
+
+# GPIO and hardware interface (for Raspberry Pi)
+# Note: RPi.GPIO is typically installed system-wide on Raspberry Pi
+
+# Database and API utilities
+pydantic>=1.8.0
+typing-extensions>=4.0.0
+
+# File and data handling
+tqdm>=4.60.0
+
+# Time and scheduling
+python-dateutil>=2.8.0
+
+# JSON schema validation
+jsonschema>=3.2.0
 
 # CRITICAL: Raspberry Pi System Packages Required
 # Install these BEFORE running pip install:
