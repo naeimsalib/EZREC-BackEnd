@@ -440,9 +440,9 @@ class SupabaseManager:
             if not self.client:
                 raise Exception("Supabase client not available")
             
-            # Clean and normalize the query
-            clean_query = query.strip()
-            logger.info(f"🔍 Processing query: {clean_query[:50]}...")
+            # Clean and normalize the query - handle multi-line queries
+            clean_query = ' '.join(query.strip().split())
+            logger.info(f"🔍 Processing query: {clean_query[:100]}...")
             
             # For simple table queries, parse and execute
             if clean_query.upper().startswith('SELECT'):
@@ -456,22 +456,22 @@ class SupabaseManager:
                     # Enhanced parsing - use regex for dynamic date/user_id matching
                     import re
                     
-                    # Parse date condition dynamically
-                    date_match = re.search(r"date\s*=\s*'([^']+)'", clean_query, re.IGNORECASE)
+                    # Parse date condition dynamically - handle multi-line
+                    date_match = re.search(r"date\s*=\s*'([^']+)'", clean_query, re.IGNORECASE | re.MULTILINE)
                     if date_match:
                         date_value = date_match.group(1)
                         query_builder = query_builder.eq("date", date_value)
                         logger.info(f"📅 Filtering by date: {date_value}")
                     
-                    # Parse user_id condition dynamically
-                    user_id_match = re.search(r"user_id\s*=\s*'([^']+)'", clean_query, re.IGNORECASE)
+                    # Parse user_id condition dynamically - handle multi-line and AND clause
+                    user_id_match = re.search(r"(?:AND\s+)?user_id\s*=\s*'([^']+)'", clean_query, re.IGNORECASE | re.MULTILINE)
                     if user_id_match:
                         user_id_value = user_id_match.group(1)
                         query_builder = query_builder.eq("user_id", user_id_value)
                         logger.info(f"👤 Filtering by user_id: {user_id_value}")
                     
                     # Parse status condition
-                    status_match = re.search(r"status\s*=\s*'([^']+)'", clean_query, re.IGNORECASE)
+                    status_match = re.search(r"(?:AND\s+)?status\s*=\s*'([^']+)'", clean_query, re.IGNORECASE | re.MULTILINE)
                     if status_match:
                         status_value = status_match.group(1)
                         query_builder = query_builder.eq("status", status_value)
@@ -484,6 +484,12 @@ class SupabaseManager:
                     
                     response = query_builder.execute()
                     logger.info(f"✅ Bookings query executed successfully - returned {len(response.data)} results")
+                    
+                    # Add detailed logging of each booking found
+                    if response.data:
+                        for i, booking in enumerate(response.data):
+                            logger.info(f"  📋 Booking {i+1}: {booking['id']} - {booking['date']} {booking['start_time']}-{booking['end_time']}")
+                    
                     return response.data
                     
                 elif 'FROM videos' in clean_query:
