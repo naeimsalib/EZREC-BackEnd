@@ -17,6 +17,16 @@
 - **Solution**: Added `errors_count INTEGER DEFAULT 0` column via migration
 - **Result**: Schema errors eliminated
 
+### Timezone Configuration ⏰
+**System Uses EST (America/New_York) Timezone:**
+- **Pi Local Time**: EST (00:xx:xx format in logs)
+- **Database UTC**: +4 hours ahead (04:xx:xx)
+- **Booking Times**: Use HH:MM format in EST timezone
+- **Example**: Booking at "00:41" means 12:41 AM EST
+- **Recording Logic**: Uses EST timezone for all time calculations
+
+**IMPORTANT**: All booking times in database should be in EST (Pi local time), not UTC!
+
 ### Environment Configuration Verification ✅
 **Both .env files verified and working correctly:**
 - `/opt/ezrec-backend/.env` (production)
@@ -44,6 +54,7 @@
 - **Packages**: Installed globally with `--break-system-packages`
 - **Database**: All tables functional with complete schema
 - **Environment**: Both .env files identical and functional
+- **Timezone**: EST (America/New_York) for all booking times
 
 ### Next Steps for Testing
 1. Create a test booking in Supabase for today
