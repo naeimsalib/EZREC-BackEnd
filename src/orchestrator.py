@@ -228,7 +228,13 @@ class EZRECOrchestrator:
         try:
             now = datetime.now()
             booking_date = datetime.strptime(booking['date'], '%Y-%m-%d').date()
-            booking_start = datetime.strptime(booking['start_time'], '%H:%M').time()
+            
+            # Handle both HH:MM and HH:MM:SS time formats
+            start_time_str = booking['start_time']
+            if len(start_time_str.split(':')) == 3:  # HH:MM:SS format
+                booking_start = datetime.strptime(start_time_str, '%H:%M:%S').time()
+            else:  # HH:MM format
+                booking_start = datetime.strptime(start_time_str, '%H:%M').time()
             
             booking_datetime = datetime.combine(booking_date, booking_start)
             
@@ -248,7 +254,13 @@ class EZRECOrchestrator:
         try:
             now = datetime.now()
             booking_date = datetime.strptime(booking['date'], '%Y-%m-%d').date()
-            booking_end = datetime.strptime(booking['end_time'], '%H:%M').time()
+            
+            # Handle both HH:MM and HH:MM:SS time formats
+            end_time_str = booking['end_time']
+            if len(end_time_str.split(':')) == 3:  # HH:MM:SS format
+                booking_end = datetime.strptime(end_time_str, '%H:%M:%S').time()
+            else:  # HH:MM format
+                booking_end = datetime.strptime(end_time_str, '%H:%M').time()
             
             booking_end_datetime = datetime.combine(booking_date, booking_end)
             
