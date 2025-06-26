@@ -52,6 +52,10 @@ install_system_dependencies() {
     sudo apt-get install -y python3-venv python3-pip python3-dev python3-libcamera python3-kms++ 
     sudo apt-get install -y python3-psutil htop psmisc lsof
     
+    # Install additional libcamera dependencies for Picamera2
+    sudo apt-get install -y libcamera-apps libcamera-dev libcamera-tools
+    sudo apt-get install -y libcamera0.3 python3-pil python3-numpy
+    
     print_success "System dependencies installed"
 }
 
@@ -134,6 +138,69 @@ deploy_code() {
     sudo chmod -R 775 $DEPLOY_DIR/{recordings,uploads,logs,temp}
     
     print_success "Code deployed to service directory"
+}
+
+# Function to create environment configuration
+create_env_file() {
+    print_status "Creating environment configuration..."
+    
+    # Create .env file for the service
+    sudo tee $DEPLOY_DIR/.env > /dev/null << 'EOF'
+# EZREC Backend Environment Configuration
+# Created by deployment script
+
+# Supabase Configuration - REQUIRED
+SUPABASE_URL=https://yikdtmbkhylucguzrbbu.supabase.co
+SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlpa2R0bWJraHlsdWNndXpyYmJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzE1NDQ3ODUsImV4cCI6MjA0NzEyMDc4NX0.nGnRqLLhjL4YJCl7BAPzSjJT8T2Ek6FO8a6Bv4i6XjY
+SUPABASE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlpa2R0bWJraHlsdWNndXpyYmJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzE1NDQ3ODUsImV4cCI6MjA0NzEyMDc4NX0.nGnRqLLhjL4YJCl7BAPzSjJT8T2Ek6FO8a6Bv4i6XjY
+
+# User Configuration
+USER_ID=8e8b7f14-1b8f-4bb1-a4de-d1b5f8e9a2c7
+USER_EMAIL=user@ezrec.com
+
+# Camera Configuration
+CAMERA_ID=raspberry_pi_camera_1
+CAMERA_NAME=EZREC Raspberry Pi Camera
+CAMERA_LOCATION=Soccer Field Main Camera
+CAMERA_DEVICE=/dev/video0
+CAMERA_INDEX=0
+
+# Recording Settings (Optimized for Pi)
+RECORD_WIDTH=1920
+RECORD_HEIGHT=1080
+RECORD_FPS=30
+PREVIEW_WIDTH=640
+PREVIEW_HEIGHT=480
+PREVIEW_FPS=24
+HARDWARE_ENCODER=h264_omx
+RECORDING_BITRATE=10000000
+
+# System Settings
+DEBUG=false
+LOG_LEVEL=INFO
+STATUS_UPDATE_INTERVAL=3
+BOOKING_CHECK_INTERVAL=5
+HEARTBEAT_INTERVAL=3
+
+# Paths
+EZREC_BASE_DIR=/opt/ezrec-backend
+
+# Network Settings
+NETWORK_TIMEOUT=30
+UPLOAD_RETRY_COUNT=3
+UPLOAD_RETRY_DELAY=60
+
+# Booking Management
+DELETE_COMPLETED_BOOKINGS=false
+MAX_RECORDING_DURATION=7200
+MIN_RECORDING_DURATION=300
+EOF
+
+    # Set proper ownership and permissions for .env file
+    sudo chown $SERVICE_USER:$SERVICE_USER $DEPLOY_DIR/.env
+    sudo chmod 600 $DEPLOY_DIR/.env
+    
+    print_success "Environment configuration created"
 }
 
 # Function to setup virtual environment
@@ -341,6 +408,7 @@ main() {
     update_code
     stop_service
     deploy_code
+    create_env_file
     clean_cache
     setup_venv
     test_camera
