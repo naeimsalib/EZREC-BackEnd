@@ -19,8 +19,8 @@ ExecStartPre=/bin/bash -c 'fuser -k /dev/video1 2>/dev/null || true'
 ExecStartPre=/bin/bash -c 'fuser -k /dev/video2 2>/dev/null || true'
 ExecStartPre=/bin/bash -c 'echo "✅ EZREC: Camera protection complete"'
 
-# Use wrapper script that properly activates virtual environment
-ExecStart=/home/michomanoly14892/code/EZREC-BackEnd/start_ezrec.sh
+# Use virtual environment Python directly 
+ExecStart=/home/michomanoly14892/code/EZREC-BackEnd/venv/bin/python3 main.py
 
 # Graceful reload and stop
 ExecReload=/bin/kill -USR1 $MAINPID
