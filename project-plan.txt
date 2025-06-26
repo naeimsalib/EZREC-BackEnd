@@ -1,167 +1,291 @@
-here's a **structured project plan** and a **step-by-step guide** that an AI model (or collaborator) can follow to safely **modify and fix the EZREC-BackEnd system** on a Raspberry Pi running Debian.
+# 🚀 EZREC-BackEnd Complete Project Plan & Deployment Guide
+
+## 📋 Project Overview
+
+**EZREC** is an automated soccer recording system that runs on Raspberry Pi, automatically recording soccer matches based on booking schedules stored in Supabase.
+
+### 🎯 System Architecture
+- **Development Environment**: `~/code/EZREC-BackEnd` (with virtual environment)
+- **Production Environment**: `/opt/ezrec-backend` (systemd service deployment)
+- **Database**: Supabase (bookings, videos, system_status tables)
+- **Camera**: Picamera2 (requires libcamera system packages)
+- **Storage**: Supabase Storage for video uploads
 
 ---
 
-## ✅ PROJECT PLAN: EZREC-BackEnd (Stable Deployment & Fix)
-
-### 🔁 Project Context Recap
-
-* 🖥️ **Target Device**: Raspberry Pi (Debian)
-* 📁 **Main Code Directory**: `~/code/EZREC-BackEnd`
-* 📁 **Deployed Code Directory**: `/opt/ezrec-backend`
-* 📦 **GitHub Usage**: All changes **must be committed and pushed** to GitHub before deployment.
-* 🔁 **Supabase**: Must validate tables and structure **before any change**.
-
----
-
-## 🗂️ PROJECT STRUCTURE CHECKLIST
-
-**Only the following are allowed in the repo:**
+## 📁 Project Structure (Clean Production)
 
 ```
 EZREC-BackEnd/
-│
-├── main.py                        # Main execution logic (recording, booking, uploads)
-├── system_status.py               # Updates system status every 3 seconds
-├── deployment.sh                  # Script for deploying to /opt/ezrec-backend
-├── ezrec-backend.service          # Systemd service unit
-├── requirements.txt               # Dependencies (Picamera2, OpenCV, Supabase)
-├── .env                           # Supabase and config values
+├── main.py                    # Main application (booking detection, recording, upload)
+├── system_status.py           # System status monitoring (3-second updates)
+├── deployment.sh              # Deployment script to /opt/ezrec-backend
+├── ezrec-backend.service      # SystemD service configuration
+├── requirements.txt           # Python dependencies
+├── .env                       # Environment variables (Supabase credentials)
+├── project-plan.txt           # This file
+└── README.md                  # Project documentation
 ```
 
-> ❌ No test or temporary scripts should exist.
+**❌ NO TEST/DEBUG FILES ALLOWED IN PRODUCTION**
 
 ---
 
-## 📅 STEP-BY-STEP DEPLOYMENT GUIDE
+## 🔧 System Dependencies
 
-### Step 1: 🔍 Validate Supabase Tables & Schema
-
-Ensure the following:
-
-* ✅ `bookings` table exists and has unique, non-duplicated entries
-* ✅ `videos` table receives uploaded records with UUID reference and correct file URLs
-* ✅ System status fields are updated every 3 seconds (`system_status` or similar table)
-* ✅ No duplicate users or ghost entries in any table
-
-**Use Supabase SQL Editor** or `supabase-python` queries to verify.
-
----
-
-### Step 2: 🔒 Ensure Camera Access is Exclusive
-
-Run on the Pi to check if any process uses the camera:
-
+### Required System Packages (Pi)
 ```bash
-lsof /dev/video0
+sudo apt update && sudo apt install -y \
+    libcamera-apps \
+    libcamera-dev \
+    libcamera-tools \
+    libcamera0.3 \
+    python3-pip \
+    python3-venv \
+    python3-dev \
+    python3-pil \
+    python3-numpy
 ```
 
-If other services like `libcamera`, `pipewire`, or `motion` are using it:
-
-```bash
-sudo systemctl disable --now pipewire wireplumber motion
+### Python Dependencies (requirements.txt)
 ```
-
-Ensure your systemd service starts **before anything else** via dependencies:
-
-```ini
-[Unit]
-Before=graphical.target
+supabase==2.3.4
+python-dotenv==1.0.0
+picamera2==0.3.12
+httpx==0.25.2
+psutil==5.9.6
+pytz==2023.3
 ```
 
 ---
 
-### Step 3: 🛠️ Code Modifications (If Needed)
+## ⚙️ Environment Configuration
 
-Before **any fix**:
-
-* ✔️ Validate existing file structure and Supabase schema
-* ✔️ Pull the latest code:
-
+### Required .env Variables
 ```bash
-cd ~/code/EZREC-BackEnd
-git pull origin main
+# Supabase Configuration
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_KEY=your-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+
+# Camera Configuration  
+CAMERA_INDEX=0
+RECORDING_QUALITY=high
+
+# System Configuration
+LOG_LEVEL=INFO
+RECORDINGS_PATH=/opt/ezrec-backend/recordings
 ```
 
-* ✔️ Modify `main.py` or related files only as needed
-* ✔️ Commit + push:
+---
 
+## 🚀 Deployment Process
+
+### Step 1: Development Setup
 ```bash
+# Clone repository
+cd ~/code
+git clone <your-repo-url> EZREC-BackEnd
+cd EZREC-BackEnd
+
+# Create virtual environment
+python3 -m venv venv
+source venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Configure environment
+cp .env.example .env  # Edit with your Supabase credentials
+```
+
+### Step 2: Code Changes & Git Workflow
+```bash
+# Make changes to code
+# Always test locally first
+
+# Commit and push changes
 git add .
-git commit -m "Fix: [short description of what was changed]"
+git commit -m "feat: description of changes"
 git push origin main
 ```
 
----
-
-### Step 4: 📤 Deploy to `/opt/ezrec-backend`
-
-Use the deployment script to copy code:
-
+### Step 3: Pi Deployment
 ```bash
-# In deployment.sh
-#!/bin/bash
+# On Pi: Pull latest code
+cd ~/code/EZREC-BackEnd
+git pull origin main
 
-echo "[INFO] Copying code to /opt/ezrec-backend..."
-sudo rm -rf /opt/ezrec-backend/*
-sudo cp -r ~/code/EZREC-BackEnd/* /opt/ezrec-backend/
-
-echo "[INFO] Restarting service..."
-sudo systemctl daemon-reload
-sudo systemctl restart ezrec-backend.service
-```
-
-Make sure it's executable:
-
-```bash
+# Deploy to production
 chmod +x deployment.sh
 ./deployment.sh
 ```
 
 ---
 
-### Step 5: 🧪 Post-Deployment Verification
+## 🔧 SystemD Service Configuration
 
-* Run:
+### Service Features
+- **Automatic startup** on boot
+- **Restart on failure** with backoff
+- **Resource limits** (CPU, memory)
+- **Security hardening** (restricted file access)
+- **Camera protection** (kill competing processes)
+- **Proper logging** to systemd journal
 
+### Service Commands
 ```bash
-sudo journalctl -u ezrec-backend.service -f
+# Service management
+sudo systemctl start ezrec-backend
+sudo systemctl stop ezrec-backend  
+sudo systemctl restart ezrec-backend
+sudo systemctl status ezrec-backend
+
+# Enable/disable autostart
+sudo systemctl enable ezrec-backend
+sudo systemctl disable ezrec-backend
+
+# View logs
+sudo journalctl -u ezrec-backend -f          # Follow logs
+sudo journalctl -u ezrec-backend --since "1 hour ago"  # Recent logs
 ```
 
-* Validate:
+---
 
-  * System status updates every 3 seconds
-  * Recording starts/stops based on `bookings`
-  * `.mp4` video gets uploaded and deleted locally
-  * Supabase `videos` table receives correct entries
+## 🔍 Troubleshooting Guide
+
+### Camera Issues
+```bash
+# Check camera access
+ls -la /dev/video*
+groups $USER  # Should include 'video'
+
+# Kill competing processes
+sudo fuser -k /dev/video0
+sudo systemctl stop motion pipewire wireplumber
+
+# Test camera
+libcamera-still -o test.jpg
+```
+
+### Service Issues
+```bash
+# Check service status
+sudo systemctl status ezrec-backend
+
+# View detailed logs
+sudo journalctl -u ezrec-backend --no-pager -l
+
+# Test configuration
+sudo systemctl daemon-reload
+```
+
+### Database Issues
+```bash
+# Test Supabase connection
+python3 -c "
+from supabase import create_client
+import os
+from dotenv import load_dotenv
+load_dotenv()
+client = create_client(os.getenv('SUPABASE_URL'), os.getenv('SUPABASE_KEY'))
+print('✅ Supabase connection successful')
+"
+```
 
 ---
 
-## 🧼 Clean-Up + Safety Practices
+## 📊 Monitoring & Verification
 
-* Always check `.env` is configured correctly with valid Supabase keys.
-* Prevent **system resource leaks** by confirming:
+### Expected Behavior
+1. **System Status**: Updates every 3 seconds
+2. **Booking Detection**: Checks every 2 seconds  
+3. **Recording**: Starts 60 seconds before booking time
+4. **Upload**: Automatic after recording completion
+5. **Cleanup**: Removes local files and booking entries
 
-  ```bash
-  ps aux | grep -i camera
-  ```
+### Log Patterns to Monitor
+```
+✅ EZREC Backend starting...
+📊 System status updated
+🔍 Checking for active bookings...
+🎬 Starting recording for booking [ID]
+🛑 Stopping recording for booking [ID]  
+📤 Uploading video to storage...
+✅ Booking [ID] completed and cleaned up
+```
+
+### Error Patterns to Watch
+```
+❌ Camera initialization failed
+❌ No module named 'libcamera'
+❌ Supabase connection failed
+❌ Recording file not found
+❌ Upload failed
+```
 
 ---
 
-## 🧾 Summary
+## 🔒 Security & Performance
 
-| Requirement                             | Status |
-| --------------------------------------- | ------ |
-| Uses `Picamera2` only                   | ✅      |
-| GitHub push before any deployment       | ✅      |
-| Code pulls from `~/code/EZREC-BackEnd`  | ✅      |
-| Deploys to `/opt/ezrec-backend`         | ✅      |
-| No test or temp scripts in project      | ✅      |
-| Validates Supabase schema               | ✅      |
-| Deletes video after successful upload   | ✅      |
-| Status updates every 3 seconds          | ✅      |
-| Prevents other processes from using cam | ✅      |
+### Security Measures
+- Service runs as non-root user
+- Restricted file system access
+- No new privileges allowed
+- Private temp directory
+- Camera-only device access
+
+### Resource Limits
+- **Memory**: Maximum 1GB
+- **CPU**: Maximum 80% usage
+- **File descriptors**: 65,536 limit
+- **Restart**: Automatic with 10s delay
 
 ---
 
-Let me know if you want this saved as a `README.md` file or included in the repo!
+## ✅ Verification Checklist
+
+Before deployment:
+- [ ] All code changes committed and pushed to GitHub
+- [ ] Virtual environment created in development
+- [ ] .env file configured with valid Supabase credentials
+- [ ] System packages installed on Pi
+- [ ] Camera access verified (no competing processes)
+
+After deployment:
+- [ ] Service starts without errors
+- [ ] System status updates every 3 seconds
+- [ ] Booking detection works (creates logs every 2 seconds)
+- [ ] Recording starts/stops based on booking times
+- [ ] Videos upload to Supabase storage
+- [ ] Booking entries removed after successful upload
+- [ ] Local video files cleaned up
+
+---
+
+## 🚨 Emergency Commands
+
+```bash
+# Stop everything immediately
+sudo systemctl stop ezrec-backend
+sudo pkill -f "python.*main.py"
+
+# Reset service completely  
+sudo systemctl stop ezrec-backend
+sudo systemctl disable ezrec-backend
+sudo rm -rf /opt/ezrec-backend/*
+# Then redeploy
+
+# Check system resources
+top -p $(pgrep -f ezrec)
+df -h /opt/ezrec-backend
+```
+
+---
+
+## 📞 Support Information
+
+- **Repository**: [GitHub Repository URL]
+- **Issues**: Report via GitHub Issues
+- **Documentation**: This project-plan.txt file
+- **Logs Location**: `sudo journalctl -u ezrec-backend`

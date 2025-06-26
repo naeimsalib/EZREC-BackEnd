@@ -1,56 +1,68 @@
 [Unit]
-Description=EZREC Backend Service - Soccer Recording System
+Description=EZREC Backend Service - Automated Soccer Recording System
 Documentation=https://github.com/naeimsalib/EZREC-BackEnd
-After=network-online.target
+After=network-online.target multi-user.target
 Wants=network-online.target
-StartLimitIntervalSec=60
-StartLimitBurst=3
+StartLimitIntervalSec=300
+StartLimitBurst=5
 
 [Service]
 Type=simple
 User=michomanoly14892
 Group=michomanoly14892
 WorkingDirectory=/opt/ezrec-backend
-ExecStartPre=/bin/bash -c 'echo "🛡️ Protecting camera for EZREC..."'
-ExecStartPre=/bin/bash -c 'sudo fuser -k /dev/video0 2>/dev/null || true'
-ExecStartPre=/bin/bash -c 'sudo fuser -k /dev/video1 2>/dev/null || true'
-ExecStartPre=/bin/bash -c 'sudo fuser -k /dev/video2 2>/dev/null || true'
-ExecStartPre=/bin/bash -c 'echo "✅ Camera protection active"'
-ExecStart=/opt/ezrec-backend/venv/bin/python3 main.py
-ExecReload=/bin/kill -USR1 $MAINPID
 
-# Environment
+# Camera protection (run as user, not sudo)
+ExecStartPre=/bin/bash -c 'echo "🛡️ EZREC: Preparing camera access..."'
+ExecStartPre=/bin/bash -c 'fuser -k /dev/video0 2>/dev/null || true'
+ExecStartPre=/bin/bash -c 'fuser -k /dev/video1 2>/dev/null || true'
+ExecStartPre=/bin/bash -c 'fuser -k /dev/video2 2>/dev/null || true'
+ExecStartPre=/bin/bash -c 'echo "✅ EZREC: Camera protection complete"'
+
+# Use development environment Python with virtual environment
+ExecStart=/home/michomanoly14892/code/EZREC-BackEnd/venv/bin/python3 /opt/ezrec-backend/main.py
+
+# Graceful reload and stop
+ExecReload=/bin/kill -USR1 $MAINPID
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+# Environment variables
 Environment=PYTHONPATH=/opt/ezrec-backend
+Environment=PYTHONUNBUFFERED=1
 EnvironmentFile=-/opt/ezrec-backend/.env
 
-# Security settings
+# Security hardening
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/opt/ezrec-backend
+ReadWritePaths=/opt/ezrec-backend /tmp
 PrivateTmp=true
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true
+RestrictSUIDSGID=true
+RemoveIPC=true
 
-# Resource limits
+# Resource management
 LimitNOFILE=65536
 MemoryMax=1G
 CPUQuota=80%
+TasksMax=100
 
-# Restart policy
+# Restart configuration
 Restart=always
-RestartSec=10
-TimeoutStartSec=60
-TimeoutStopSec=30
+RestartSec=15
+TimeoutStartSec=120
 
-# Logging
+# Logging configuration
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=ezrec-backend
 
-# Additional video group access for camera
-SupplementaryGroups=video
+# Device access for camera
+SupplementaryGroups=video dialout
 
 [Install]
 WantedBy=multi-user.target 
