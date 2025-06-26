@@ -12,6 +12,80 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
 from config import SUPABASE_URL, SUPABASE_ANON_KEY, USER_ID
 
+class FixedSupabaseManager:
+    """Fixed SupabaseManager that properly initializes its own client."""
+    
+    def __init__(self):
+        # Initialize Supabase client directly
+        try:
+            from supabase import create_client
+            self.client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+            print(f"✅ Supabase client initialized successfully")
+        except Exception as e:
+            print(f"❌ Failed to initialize Supabase client: {e}")
+            self.client = None
+    
+    async def execute_query(self, query: str):
+        """Execute a raw SQL query with proper WHERE clause parsing."""
+        try:
+            if not self.client:
+                raise Exception("Supabase client not available")
+            
+            # Clean and normalize the query - handle multi-line queries
+            clean_query = ' '.join(query.strip().split())
+            print(f"🔍 Processing query: {clean_query[:100]}...")
+            
+            # For simple table queries, parse and execute
+            if clean_query.upper().startswith('SELECT'):
+                print("✅ Confirmed SELECT query detected")
+                
+                # Handle bookings queries with WHERE conditions
+                if 'FROM bookings' in clean_query:
+                    print("📋 Processing bookings table query")
+                    query_builder = self.client.table("bookings").select("*")
+                    
+                    # Enhanced parsing - use regex for dynamic date/user_id matching
+                    import re
+                    
+                    # Parse date condition dynamically - handle multi-line
+                    date_match = re.search(r"date\s*=\s*'([^']+)'", clean_query, re.IGNORECASE | re.MULTILINE)
+                    if date_match:
+                        date_value = date_match.group(1)
+                        query_builder = query_builder.eq("date", date_value)
+                        print(f"📅 Filtering by date: {date_value}")
+                    
+                    # Parse user_id condition dynamically - handle multi-line and AND clause
+                    user_id_match = re.search(r"(?:AND\s+)?user_id\s*=\s*'([^']+)'", clean_query, re.IGNORECASE | re.MULTILINE)
+                    if user_id_match:
+                        user_id_value = user_id_match.group(1)
+                        query_builder = query_builder.eq("user_id", user_id_value)
+                        print(f"👤 Filtering by user_id: {user_id_value}")
+                    
+                    # Add ordering
+                    if "ORDER BY start_time ASC" in clean_query:
+                        query_builder = query_builder.order("start_time", desc=False)
+                        print("🔄 Ordering by start_time ASC")
+                    
+                    response = query_builder.execute()
+                    print(f"✅ Bookings query executed successfully - returned {len(response.data)} results")
+                    
+                    # Add detailed logging of each booking found
+                    if response.data:
+                        for i, booking in enumerate(response.data):
+                            print(f"  📋 Booking {i+1}: {booking['id']} - {booking['date']} {booking['start_time']}-{booking['end_time']}")
+                    
+                    return response.data
+                else:
+                    print(f"❌ Unsupported table in query: {clean_query}")
+                    return []
+            else:
+                print(f"❌ Only SELECT queries supported. Received: {clean_query}")
+                return []
+                
+        except Exception as e:
+            print(f"❌ Query execution failed: {e}")
+            raise
+
 async def main():
     """Debug Supabase API calls"""
     print("🔍 EZREC Supabase API Debug")
@@ -23,12 +97,10 @@ async def main():
     print(f"🔑 Using API Key: {SUPABASE_ANON_KEY[:20]}...")
     print(f"🔑 Key length: {len(SUPABASE_ANON_KEY)} chars")
     
-    # Test using SupabaseManager (same as orchestrator)
-    print("\n🧪 Test 1: SupabaseManager - All bookings")
+    # Test using Fixed SupabaseManager
+    print("\n🧪 Test 1: Fixed SupabaseManager - All bookings")
     try:
-        from utils import SupabaseManager
-        
-        db = SupabaseManager()
+        db = FixedSupabaseManager()
         
         # Test 1: Get all bookings
         query1 = "SELECT * FROM bookings ORDER BY date, start_time"
@@ -43,7 +115,7 @@ async def main():
         traceback.print_exc()
     
     # Test 2: Filter by date only
-    print("\n🧪 Test 2: SupabaseManager - Filter by date only")
+    print("\n🧪 Test 2: Fixed SupabaseManager - Filter by date only")
     try:
         query2 = "SELECT * FROM bookings WHERE date = '2025-06-25' ORDER BY start_time"
         result2 = await db.execute_query(query2)
@@ -57,7 +129,7 @@ async def main():
         traceback.print_exc()
     
     # Test 3: Filter by user_id only  
-    print("\n🧪 Test 3: SupabaseManager - Filter by user_id only")
+    print("\n🧪 Test 3: Fixed SupabaseManager - Filter by user_id only")
     try:
         query3 = f"SELECT * FROM bookings WHERE user_id = '{USER_ID}' ORDER BY date, start_time"
         result3 = await db.execute_query(query3)
@@ -71,7 +143,7 @@ async def main():
         traceback.print_exc()
     
     # Test 4: The EXACT orchestrator query
-    print("\n🧪 Test 4: SupabaseManager - EXACT orchestrator query")
+    print("\n🧪 Test 4: Fixed SupabaseManager - EXACT orchestrator query")
     try:
         query4 = f"""
         SELECT * FROM bookings 
@@ -93,23 +165,31 @@ async def main():
         import traceback
         traceback.print_exc()
     
-    # Test 5: Try variations of the problematic query
-    print("\n🧪 Test 5: Query variations")
-    
-    variations = [
-        f"SELECT * FROM bookings WHERE date = '2025-06-25' AND user_id = '{USER_ID}' ORDER BY start_time",
-        f"SELECT * FROM bookings WHERE date='2025-06-25' AND user_id='{USER_ID}' ORDER BY start_time",
-        f"SELECT * FROM bookings WHERE date = '2025-06-25' and user_id = '{USER_ID}' ORDER BY start_time",
-        f"SELECT id, date, start_time, end_time, user_id FROM bookings WHERE date = '2025-06-25' AND user_id = '{USER_ID}'"
-    ]
-    
-    for i, query in enumerate(variations, 1):
-        try:
-            print(f"  🔍 Variation {i}: {query[:80]}...")
-            result = await db.execute_query(query)
-            print(f"    ✅ Results: {len(result) if result else 0}")
-        except Exception as e:
-            print(f"    ❌ Error: {e}")
+    # Test 5: Direct Python client test (bypass SupabaseManager)
+    print("\n🧪 Test 5: Direct Supabase Client - Bypass SupabaseManager")
+    try:
+        from supabase import create_client
+        direct_client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+        
+        # Direct API call
+        response = direct_client.table("bookings")\
+            .select("*")\
+            .eq("date", "2025-06-25")\
+            .eq("user_id", USER_ID)\
+            .order("start_time")\
+            .execute()
+        
+        print(f"✅ Direct client result: {len(response.data)} bookings")
+        if response.data:
+            for booking in response.data:
+                print(f"  📋 {booking['id']}: {booking['start_time']}-{booking['end_time']}")
+        else:
+            print("  ❌ NO RESULTS from direct client either!")
+            
+    except Exception as e:
+        print(f"❌ Direct client error: {e}")
+        import traceback
+        traceback.print_exc()
     
     # Test 6: Check current time and nearby bookings
     print("\n🧪 Test 6: Time-based analysis")
@@ -117,13 +197,16 @@ async def main():
     print(f"⏰ Current time: {current_time}")
     
     try:
-        # Get bookings for today
-        query6 = f"SELECT * FROM bookings WHERE date = '2025-06-25' ORDER BY start_time"
-        result6 = await db.execute_query(query6)
+        # Get bookings for today with direct client
+        response = direct_client.table("bookings")\
+            .select("*")\
+            .eq("date", "2025-06-25")\
+            .order("start_time")\
+            .execute()
         
-        if result6:
+        if response.data:
             print("📅 All bookings for today:")
-            for booking in result6:
+            for booking in response.data:
                 start_time = booking.get('start_time', 'N/A')
                 end_time = booking.get('end_time', 'N/A')
                 user_id = booking.get('user_id', 'N/A')
@@ -142,6 +225,7 @@ async def main():
     print("   • Results for date filtering")  
     print("   • Results for user filtering")
     print("   • Results for EXACT orchestrator query")
+    print("   • Results from direct client vs SupabaseManager")
     print("   • Any error messages or mismatches")
 
 if __name__ == "__main__":
