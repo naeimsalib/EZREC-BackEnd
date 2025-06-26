@@ -79,6 +79,10 @@ sudo cp "$REPO_DIR/.env" $DEPLOY_DIR/
 print_status "Installing/updating systemd service..."
 sudo cp "$REPO_DIR/ezrec-backend.service" /etc/systemd/system/
 
+print_status "Installing wrapper script..."
+sudo cp "$REPO_DIR/start_ezrec.sh" /home/michomanoly14892/code/EZREC-BackEnd/
+sudo chmod +x /home/michomanoly14892/code/EZREC-BackEnd/start_ezrec.sh
+
 print_status "Setting ownership and permissions..."
 sudo chown -R $SERVICE_USER:$SERVICE_USER $DEPLOY_DIR
 sudo chmod -R 755 $DEPLOY_DIR
@@ -135,6 +139,7 @@ echo "📁 Deployment structure:"
 echo "  Development: $REPO_DIR"
 echo "  Production: $DEPLOY_DIR"
 echo "  Virtual Env: $VENV_PATH"
+echo "  Wrapper Script: /home/michomanoly14892/code/EZREC-BackEnd/start_ezrec.sh"
 echo ""
 print_success "🚀 Deployment completed successfully!"
 print_status "Monitor the logs to verify proper operation."

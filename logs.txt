@@ -1,0 +1,89 @@
+(venv) michomanoly14892@raspberrypi:~/code/EZREC-BackEnd $ sudo systemctl stop ezrec-backend
+(venv) michomanoly14892@raspberrypi:~/code/EZREC-BackEnd $ # Create a wrapper script
+cat > ~/code/EZREC-BackEnd/start_ezrec.sh << 'EOF'
+#!/bin/bash
+cd /home/michomanoly14892/code/EZREC-BackEnd
+source venv/bin/activate
+cd /opt/ezrec-backend
+exec python main.py
+EOF
+
+# Make it executable
+chmod +x ~/code/EZREC-BackEnd/start_ezrec.sh
+
+# Test the wrapper script works
+~/code/EZREC-BackEnd/start_ezrec.sh
+2025-06-26 00:03:55,377 - EZREC - INFO - ✅ Supabase client initialized
+2025-06-26 00:03:55,378 - EZREC - INFO - 🎬 EZREC Main Controller initialized
+2025-06-26 00:03:55,378 - EZREC - INFO - 🚀 Starting EZREC Main Controller...
+2025-06-26 00:03:55,378 - EZREC - INFO - 🛡️ Protecting camera resources...
+2025-06-26 00:03:55,461 - EZREC - ERROR - ❌ Camera protection failed: No module named 'libcamera'
+2025-06-26 00:03:55,462 - EZREC - INFO - ✅ Status updater started (3-second intervals)
+2025-06-26 00:03:55,462 - EZREC - INFO - 🔄 Starting main execution loop...
+2025-06-26 00:03:55,867 - httpx - INFO - HTTP Request: POST https://iszmsaayxpdrovealrrp.supabase.co/rest/v1/system_status?on_conflict=user_id%2Ccamera_id "HTTP/2 400 Bad Request"
+2025-06-26 00:03:55,867 - EZREC - ERROR - ❌ Failed to update system status: {'message': "Could not find the 'camera_status' column of 'system_status' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2025-06-26 00:03:55,921 - httpx - INFO - HTTP Request: GET https://iszmsaayxpdrovealrrp.supabase.co/rest/v1/bookings?select=%2A&user_id=eq.65aa2e2a-e463-424d-b88f-0724bb0bea3a&date=eq.2025-06-26 "HTTP/2 200 OK"
+2025-06-26 00:03:55,924 - EZREC - INFO - 📋 Found 0 bookings for today
+2025-06-26 00:03:58,104 - httpx - INFO - HTTP Request: GET https://iszmsaayxpdrovealrrp.supabase.co/rest/v1/bookings?select=%2A&user_id=eq.65aa2e2a-e463-424d-b88f-0724bb0bea3a&date=eq.2025-06-26 "HTTP/2 200 OK"
+2025-06-26 00:03:58,105 - EZREC - INFO - 📋 Found 0 bookings for today
+2025-06-26 00:03:59,035 - httpx - INFO - HTTP Request: POST https://iszmsaayxpdrovealrrp.supabase.co/rest/v1/system_status?on_conflict=user_id%2Ccamera_id "HTTP/2 400 Bad Request"
+2025-06-26 00:03:59,035 - EZREC - ERROR - ❌ Failed to update system status: {'message': "Could not find the 'camera_status' column of 'system_status' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2025-06-26 00:04:00,292 - httpx - INFO - HTTP Request: GET https://iszmsaayxpdrovealrrp.supabase.co/rest/v1/bookings?select=%2A&user_id=eq.65aa2e2a-e463-424d-b88f-0724bb0bea3a&date=eq.2025-06-26 "HTTP/2 200 OK"
+2025-06-26 00:04:00,294 - EZREC - INFO - 📋 Found 0 bookings for today
+2025-06-26 00:04:02,206 - httpx - INFO - HTTP Request: POST https://iszmsaayxpdrovealrrp.supabase.co/rest/v1/system_status?on_conflict=user_id%2Ccamera_id "HTTP/2 400 Bad Request"
+2025-06-26 00:04:02,207 - EZREC - ERROR - ❌ Failed to update system status: {'message': "Could not find the 'camera_status' column of 'system_status' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2025-06-26 00:04:02,469 - httpx - INFO - HTTP Request: GET https://iszmsaayxpdrovealrrp.supabase.co/rest/v1/bookings?select=%2A&user_id=eq.65aa2e2a-e463-424d-b88f-0724bb0bea3a&date=eq.2025-06-26 "HTTP/2 200 OK"
+2025-06-26 00:04:02,470 - EZREC - INFO - 📋 Found 0 bookings for today
+2025-06-26 00:04:04,644 - httpx - INFO - HTTP Request: GET https://iszmsaayxpdrovealrrp.supabase.co/rest/v1/bookings?select=%2A&user_id=eq.65aa2e2a-e463-424d-b88f-0724bb0bea3a&date=eq.2025-06-26 "HTTP/2 200 OK"
+2025-06-26 00:04:04,645 - EZREC - INFO - 📋 Found 0 bookings for today
+2025-06-26 00:04:05,300 - httpx - INFO - HTTP Request: POST https://iszmsaayxpdrovealrrp.supabase.co/rest/v1/system_status?on_conflict=user_id%2Ccamera_id "HTTP/2 400 Bad Request"
+2025-06-26 00:04:05,301 - EZREC - ERROR - ❌ Failed to update system status: {'message': "Could not find the 'camera_status' column of 'system_status' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2025-06-26 00:04:06,826 - httpx - INFO - HTTP Request: GET https://iszmsaayxpdrovealrrp.supabase.co/rest/v1/bookings?select=%2A&user_id=eq.65aa2e2a-e463-424d-b88f-0724bb0bea3a&date=eq.2025-06-26 "HTTP/2 200 OK"
+2025-06-26 00:04:06,827 - EZREC - INFO - 📋 Found 0 bookings for today
+2025-06-26 00:04:08,399 - httpx - INFO - HTTP Request: POST https://iszmsaayxpdrovealrrp.supabase.co/rest/v1/system_status?on_conflict=user_id%2Ccamera_id "HTTP/2 400 Bad Request"
+2025-06-26 00:04:08,400 - EZREC - ERROR - ❌ Failed to update system status: {'message': "Could not find the 'camera_status' column of 'system_status' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2025-06-26 00:04:08,921 - httpx - INFO - HTTP Request: GET https://iszmsaayxpdrovealrrp.supabase.co/rest/v1/bookings?select=%2A&user_id=eq.65aa2e2a-e463-424d-b88f-0724bb0bea3a&date=eq.2025-06-26 "HTTP/2 200 OK"
+2025-06-26 00:04:08,922 - EZREC - INFO - 📋 Found 0 bookings for today
+2025-06-26 00:04:11,021 - httpx - INFO - HTTP Request: GET https://iszmsaayxpdrovealrrp.supabase.co/rest/v1/bookings?select=%2A&user_id=eq.65aa2e2a-e463-424d-b88f-0724bb0bea3a&date=eq.2025-06-26 "HTTP/2 200 OK"
+2025-06-26 00:04:11,022 - EZREC - INFO - 📋 Found 0 bookings for today
+2025-06-26 00:04:11,501 - httpx - INFO - HTTP Request: POST https://iszmsaayxpdrovealrrp.supabase.co/rest/v1/system_status?on_conflict=user_id%2Ccamera_id "HTTP/2 400 Bad Request"
+2025-06-26 00:04:11,501 - EZREC - ERROR - ❌ Failed to update system status: {'message': "Could not find the 'camera_status' column of 'system_status' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2025-06-26 00:04:13,122 - httpx - INFO - HTTP Request: GET https://iszmsaayxpdrovealrrp.supabase.co/rest/v1/bookings?select=%2A&user_id=eq.65aa2e2a-e463-424d-b88f-0724bb0bea3a&date=eq.2025-06-26 "HTTP/2 200 OK"
+2025-06-26 00:04:13,125 - EZREC - INFO - 📋 Found 0 bookings for today
+2025-06-26 00:04:14,608 - httpx - INFO - HTTP Request: POST https://iszmsaayxpdrovealrrp.supabase.co/rest/v1/system_status?on_conflict=user_id%2Ccamera_id "HTTP/2 400 Bad Request"
+2025-06-26 00:04:14,608 - EZREC - ERROR - ❌ Failed to update system status: {'message': "Could not find the 'camera_status' column of 'system_status' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2025-06-26 00:04:15,222 - httpx - INFO - HTTP Request: GET https://iszmsaayxpdrovealrrp.supabase.co/rest/v1/bookings?select=%2A&user_id=eq.65aa2e2a-e463-424d-b88f-0724bb0bea3a&date=eq.2025-06-26 "HTTP/2 200 OK"
+2025-06-26 00:04:15,222 - EZREC - INFO - 📋 Found 0 bookings for today
+^C2025-06-26 00:04:16,203 - EZREC - INFO - 🛑 Received signal 2, shutting down...
+(venv) michomanoly14892@raspberrypi:~/code/EZREC-BackEnd $ ^C
+(venv) michomanoly14892@raspberrypi:~/code/EZREC-BackEnd $ 
+
+(venv) michomanoly14892@raspberrypi:~/code/EZREC-BackEnd $ # Update the service file to use the wrapper
+sudo sed -i 's|ExecStart=.*|ExecStart=/home/michomanoly14892/code/EZREC-BackEnd/start_ezrec.sh|' /etc/systemd/system/ezrec-backend.service
+
+# Reload and restart
+sudo systemctl daemon-reload
+sudo systemctl start ezrec-backend
+
+# Check status
+sudo systemctl status ezrec-backend
+● ezrec-backend.service - EZREC Backend Service - Automated Soccer Recording System
+     Loaded: loaded (/etc/systemd/system/ezrec-backend.service; enabled; preset: enabled)
+     Active: active (running) since Thu 2025-06-26 00:04:26 EDT; 14ms ago
+       Docs: https://github.com/naeimsalib/EZREC-BackEnd
+    Process: 17582 ExecStartPre=/bin/bash -c echo "🛡️ EZREC: Preparing camera access..." (code=exited, status=0/SUCCESS)
+    Process: 17583 ExecStartPre=/bin/bash -c fuser -k /dev/video0 2>/dev/null || true (code=exited, status=0/SUCCESS)
+    Process: 17585 ExecStartPre=/bin/bash -c fuser -k /dev/video1 2>/dev/null || true (code=exited, status=0/SUCCESS)
+    Process: 17587 ExecStartPre=/bin/bash -c fuser -k /dev/video2 2>/dev/null || true (code=exited, status=0/SUCCESS)
+    Process: 17589 ExecStartPre=/bin/bash -c echo "✅ EZREC: Camera protection complete" (code=exited, status=0/SUCCESS)
+   Main PID: 17590 ((ezrec.sh))
+      Tasks: 1 (limit: 100)
+        CPU: 128ms
+     CGroup: /system.slice/ezrec-backend.service
+             └─17590 "(ezrec.sh)"
+
+Jun 26 00:04:26 raspberrypi systemd[1]: Starting ezrec-backend.service - EZREC Backend Service - Automated Soccer Recording System...
+Jun 26 00:04:26 raspberrypi ezrec-backend[17582]: 🛡️ EZREC: Preparing camera access...
+Jun 26 00:04:26 raspberrypi ezrec-backend[17589]: ✅ EZREC: Camera protection complete
+Jun 26 00:04:26 raspberrypi systemd[1]: Started ezrec-backend.service - EZREC Backend Service - Automated Soccer Recording System.
+(venv) michomanoly14892@raspberrypi:~/code/EZREC-BackEnd $ 
