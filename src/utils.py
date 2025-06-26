@@ -446,18 +446,37 @@ class SupabaseManager:
                 if 'FROM bookings' in query:
                     query_builder = self.client.table("bookings").select("*")
                     
-                    # Parse WHERE conditions for bookings
-                    if "WHERE date = '2025-06-25'" in query:
-                        query_builder = query_builder.eq("date", "2025-06-25")
-                    if "user_id = '65aa2e2a-e463-424d-b88f-0724bb0bea3a'" in query:
-                        query_builder = query_builder.eq("user_id", "65aa2e2a-e463-424d-b88f-0724bb0bea3a")
+                    # Enhanced parsing - use regex for dynamic date/user_id matching
+                    import re
+                    
+                    # Parse date condition dynamically
+                    date_match = re.search(r"date\s*=\s*'([^']+)'", query, re.IGNORECASE)
+                    if date_match:
+                        date_value = date_match.group(1)
+                        query_builder = query_builder.eq("date", date_value)
+                        logger.info(f"📅 Filtering by date: {date_value}")
+                    
+                    # Parse user_id condition dynamically
+                    user_id_match = re.search(r"user_id\s*=\s*'([^']+)'", query, re.IGNORECASE)
+                    if user_id_match:
+                        user_id_value = user_id_match.group(1)
+                        query_builder = query_builder.eq("user_id", user_id_value)
+                        logger.info(f"👤 Filtering by user_id: {user_id_value}")
+                    
+                    # Parse status condition
+                    status_match = re.search(r"status\s*=\s*'([^']+)'", query, re.IGNORECASE)
+                    if status_match:
+                        status_value = status_match.group(1)
+                        query_builder = query_builder.eq("status", status_value)
+                        logger.info(f"📊 Filtering by status: {status_value}")
                     
                     # Add ordering
                     if "ORDER BY start_time ASC" in query:
                         query_builder = query_builder.order("start_time", desc=False)
+                        logger.info("🔄 Ordering by start_time ASC")
                     
                     response = query_builder.execute()
-                    logger.info(f"📋 Bookings query returned {len(response.data)} results")
+                    logger.info(f"✅ Bookings query executed successfully - returned {len(response.data)} results")
                     return response.data
                     
                 elif 'FROM videos' in query:
