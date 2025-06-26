@@ -8,7 +8,7 @@
 - **Development Environment**: `~/code/EZREC-BackEnd` (with virtual environment)
 - **Production Environment**: `/opt/ezrec-backend` (systemd service deployment)
 - **Database**: Supabase (bookings, videos, system_status tables)
-- **Camera**: Picamera2 (requires libcamera system packages)
+- **Camera**: Picamera2 (modern Python camera interface for Raspberry Pi)
 - **Storage**: Supabase Storage for video uploads
 
 ---
@@ -36,15 +36,12 @@ EZREC-BackEnd/
 ### Required System Packages (Pi)
 ```bash
 sudo apt update && sudo apt install -y \
-    libcamera-apps \
-    libcamera-dev \
-    libcamera-tools \
-    libcamera0.3 \
     python3-pip \
     python3-venv \
     python3-dev \
     python3-pil \
-    python3-numpy
+    python3-numpy \
+    python3-picamera2
 ```
 
 ### Python Dependencies (requirements.txt)
@@ -164,8 +161,8 @@ groups $USER  # Should include 'video'
 sudo fuser -k /dev/video0
 sudo systemctl stop motion pipewire wireplumber
 
-# Test camera
-libcamera-still -o test.jpg
+# Test camera with Picamera2
+python3 -c "from picamera2 import Picamera2; cam = Picamera2(); print('Camera OK'); cam.close()"
 ```
 
 ### Service Issues
@@ -218,7 +215,7 @@ print('✅ Supabase connection successful')
 ### Error Patterns to Watch
 ```
 ❌ Camera initialization failed
-❌ No module named 'libcamera'
+❌ Picamera2 import failed
 ❌ Supabase connection failed
 ❌ Recording file not found
 ❌ Upload failed

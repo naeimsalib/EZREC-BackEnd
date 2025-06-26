@@ -161,8 +161,8 @@ class EZRECMain:
         try:
             self.logger.info("🛡️ Protecting camera resources...")
             
-            # Kill any existing camera processes
-            camera_processes = ["libcamera", "raspistill", "raspivid", "motion", "fswebcam"]
+            # Kill any existing camera processes (removed libcamera since we use Picamera2)
+            camera_processes = ["raspistill", "raspivid", "motion", "fswebcam"]
             for proc_name in camera_processes:
                 try:
                     subprocess.run(["sudo", "pkill", "-f", proc_name], 
@@ -170,7 +170,7 @@ class EZRECMain:
                 except:
                     pass
             
-            # Check if camera is available
+            # Check if Picamera2 is available
             try:
                 from picamera2 import Picamera2
                 test_cam = Picamera2()
