@@ -50,7 +50,7 @@ install_system_dependencies() {
     
     # Install required packages for Picamera2 and system monitoring
     sudo apt-get install -y python3-venv python3-pip python3-dev python3-libcamera python3-kms++ 
-    sudo apt-get install -y psutil htop fuser lsof
+    sudo apt-get install -y python3-psutil htop psmisc lsof
     
     print_success "System dependencies installed"
 }
