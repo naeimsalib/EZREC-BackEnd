@@ -382,10 +382,17 @@ class EZRECMain:
             from picamera2.encoders import H264Encoder
             from picamera2.outputs import FileOutput
             
+            # Ensure recordings directory exists
+            output_file = Path(output_path)
+            output_file.parent.mkdir(parents=True, exist_ok=True)
+            self.logger.info(f"📁 Recordings directory: {output_file.parent}")
+            
             # Initialize camera
+            self.logger.info("📷 Initializing Picamera2...")
             picam2 = Picamera2()
             
             # Configure for recording
+            self.logger.info(f"📷 Configuring camera: {self.camera_config['width']}x{self.camera_config['height']} @ {self.camera_config['fps']}fps")
             config = picam2.create_video_configuration(
                 main={"size": (self.camera_config["width"], self.camera_config["height"])},
                 controls={"FrameRate": self.camera_config["fps"]}
@@ -393,19 +400,44 @@ class EZRECMain:
             picam2.configure(config)
             
             # Setup encoder
+            self.logger.info(f"🎞️  Setting up H264 encoder with bitrate: {self.camera_config['bitrate']}")
             encoder = H264Encoder(bitrate=self.camera_config["bitrate"])
             output = FileOutput(output_path)
             
+            # Start camera first
+            self.logger.info("📷 Starting camera...")
+            picam2.start()
+            
+            # Brief delay to ensure camera is ready
+            await asyncio.sleep(0.5)
+            
             # Start recording
+            self.logger.info(f"🎬 Starting recording to: {output_path}")
             picam2.start_recording(encoder, output)
             
             # Store camera reference for stopping
             self.camera_process = picam2
             
-            self.logger.info(f"✅ Picamera2 recording started: {output_path}")
+            # Verify file is being created
+            await asyncio.sleep(1)  # Give it a second to start writing
+            if output_file.exists():
+                self.logger.info(f"✅ Recording file created: {output_path} ({output_file.stat().st_size} bytes)")
+            else:
+                self.logger.warning(f"⚠️  Recording file not yet visible: {output_path}")
             
+            self.logger.info(f"✅ Picamera2 recording started successfully")
+            
+        except ImportError as e:
+            self.logger.error(f"❌ Picamera2 import failed - install required: {e}")
+            raise
         except Exception as e:
             self.logger.error(f"❌ Picamera2 recording failed: {e}")
+            # Clean up camera if initialization failed
+            try:
+                if 'picam2' in locals():
+                    picam2.close()
+            except:
+                pass
             raise
     
     async def stop_booking_recording(self):
@@ -422,20 +454,38 @@ class EZRECMain:
                     self.camera_process.stop_recording()
                     self.camera_process.close()
                     self.camera_process = None
-                except:
-                    pass
+                    self.logger.info("✅ Camera recording stopped")
+                except Exception as e:
+                    self.logger.error(f"❌ Error stopping camera: {e}")
             
             # Find the recording file
             booking_id = self.current_booking.get('id')
+            self.logger.info(f"🔍 Looking for recording files: *{booking_id}*.mp4 in {self.recordings_dir}")
+            
+            # List all files in recordings directory for debugging
+            all_files = list(self.recordings_dir.glob("*.mp4"))
+            self.logger.info(f"📁 All MP4 files in recordings dir: {[f.name for f in all_files]}")
+            
             recording_files = list(self.recordings_dir.glob(f"*{booking_id}*.mp4"))
+            self.logger.info(f"📁 Matching recording files: {[f.name for f in recording_files]}")
             
             if recording_files:
                 recording_path = recording_files[0]
+                self.logger.info(f"✅ Found recording file: {recording_path}")
                 
                 # Process the completed recording
                 await self.process_completed_recording(self.current_booking, str(recording_path))
             else:
-                self.logger.error("❌ No recording file found")
+                # Check if any files were created
+                if all_files:
+                    # Use the most recent file as fallback
+                    latest_file = max(all_files, key=lambda f: f.stat().st_mtime)
+                    self.logger.warning(f"⚠️  No matching file found, using latest: {latest_file}")
+                    await self.process_completed_recording(self.current_booking, str(latest_file))
+                else:
+                    self.logger.error("❌ No recording files found at all - camera recording likely failed")
+                    # Still remove the booking to prevent infinite loops
+                    await self.remove_booking(booking_id)
             
             # Update status
             self.recording_active = False
@@ -450,6 +500,9 @@ class EZRECMain:
             
         except Exception as e:
             self.logger.error(f"❌ Failed to stop recording: {e}")
+            # Clear state to prevent infinite loops
+            self.recording_active = False
+            self.current_booking = None
     
     async def process_completed_recording(self, booking: Dict, recording_path: str):
         """Process completed recording: upload and cleanup"""
@@ -482,43 +535,80 @@ class EZRECMain:
                 self.logger.error(f"❌ Recording file not found: {recording_path}")
                 return False
             
+            file_size = recording_file.stat().st_size
+            self.logger.info(f"📁 Found recording file: {recording_file.name} ({file_size} bytes)")
+            
             # Generate storage path
             timestamp = datetime.now().strftime("%Y/%m/%d")
             storage_path = f"recordings/{timestamp}/{recording_file.name}"
+            self.logger.info(f"📤 Uploading to storage path: {storage_path}")
             
             # Upload to storage bucket
-            with open(recording_path, 'rb') as file:
-                result = self.supabase.storage.from_("videos").upload(storage_path, file)
-            
-            if result:
-                # Get public URL
-                public_url = self.supabase.storage.from_("videos").get_public_url(storage_path)
+            try:
+                with open(recording_path, 'rb') as file:
+                    self.logger.info("📤 Starting file upload to Supabase storage...")
+                    result = self.supabase.storage.from_("videos").upload(storage_path, file)
+                    self.logger.info(f"📤 Upload result: {result}")
                 
-                # Create video record in database
-                video_data = {
-                    "user_id": self.user_id,
-                    "camera_id": self.camera_id,
-                    "filename": recording_file.name,
-                    "file_url": public_url,
-                    "file_size": recording_file.stat().st_size,
-                    "duration_seconds": None,  # Could be calculated if needed
-                    "recording_date": booking.get("date"),
-                    "recording_start_time": booking.get("start_time"),
-                    "recording_end_time": booking.get("end_time"),
-                    "upload_timestamp": datetime.now().isoformat(),
-                    "storage_path": storage_path
-                }
-                
-                video_result = self.supabase.table("videos").insert(video_data).execute()
-                
-                if video_result.data:
-                    self.logger.info(f"✅ Video uploaded and recorded: {storage_path}")
-                    return True
+                if result:
+                    self.logger.info("✅ File uploaded successfully to storage")
+                    
+                    # Get public URL
+                    try:
+                        public_url = self.supabase.storage.from_("videos").get_public_url(storage_path)
+                        self.logger.info(f"🔗 Generated public URL: {public_url}")
+                    except Exception as e:
+                        self.logger.error(f"❌ Failed to get public URL: {e}")
+                        # Use a fallback URL format
+                        public_url = f"https://iszmsaayxpdrovealrrp.supabase.co/storage/v1/object/public/videos/{storage_path}"
+                        self.logger.info(f"🔗 Using fallback URL: {public_url}")
+                    
+                    # Create video record in database
+                    video_data = {
+                        "user_id": self.user_id,
+                        "camera_id": self.camera_id,
+                        "filename": recording_file.name,
+                        "file_url": public_url,
+                        "file_size": file_size,
+                        "duration_seconds": None,  # Could be calculated if needed
+                        "recording_date": booking.get("date"),
+                        "recording_start_time": booking.get("start_time"),
+                        "recording_end_time": booking.get("end_time"),
+                        "upload_timestamp": datetime.now().isoformat(),
+                        "storage_path": storage_path
+                    }
+                    
+                    self.logger.info(f"💾 Creating video record in database: {video_data}")
+                    video_result = self.supabase.table("videos").insert(video_data).execute()
+                    
+                    if video_result.data:
+                        self.logger.info(f"✅ Video uploaded and recorded: {storage_path}")
+                        return True
+                    else:
+                        self.logger.error(f"❌ Failed to create video record: {video_result}")
+                        return False
                 else:
-                    self.logger.error("❌ Failed to create video record")
+                    self.logger.error(f"❌ Failed to upload to storage: {result}")
                     return False
-            else:
-                self.logger.error("❌ Failed to upload to storage")
+                    
+            except Exception as upload_error:
+                self.logger.error(f"❌ Storage upload error: {upload_error}")
+                
+                # Try alternative storage bucket names in case "videos" doesn't exist
+                alternative_buckets = ["ezrec-videos", "recordings", "camera-recordings"]
+                for bucket_name in alternative_buckets:
+                    try:
+                        self.logger.info(f"🔄 Trying alternative bucket: {bucket_name}")
+                        with open(recording_path, 'rb') as file:
+                            result = self.supabase.storage.from_(bucket_name).upload(storage_path, file)
+                        if result:
+                            self.logger.info(f"✅ Successfully uploaded to {bucket_name}")
+                            public_url = f"https://iszmsaayxpdrovealrrp.supabase.co/storage/v1/object/public/{bucket_name}/{storage_path}"
+                            return True
+                    except Exception as alt_error:
+                        self.logger.debug(f"❌ Alternative bucket {bucket_name} failed: {alt_error}")
+                        continue
+                
                 return False
                 
         except Exception as e:

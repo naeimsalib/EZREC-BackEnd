@@ -1,0 +1,167 @@
+here's a **structured project plan** and a **step-by-step guide** that an AI model (or collaborator) can follow to safely **modify and fix the EZREC-BackEnd system** on a Raspberry Pi running Debian.
+
+---
+
+## ✅ PROJECT PLAN: EZREC-BackEnd (Stable Deployment & Fix)
+
+### 🔁 Project Context Recap
+
+* 🖥️ **Target Device**: Raspberry Pi (Debian)
+* 📁 **Main Code Directory**: `~/code/EZREC-BackEnd`
+* 📁 **Deployed Code Directory**: `/opt/ezrec-backend`
+* 📦 **GitHub Usage**: All changes **must be committed and pushed** to GitHub before deployment.
+* 🔁 **Supabase**: Must validate tables and structure **before any change**.
+
+---
+
+## 🗂️ PROJECT STRUCTURE CHECKLIST
+
+**Only the following are allowed in the repo:**
+
+```
+EZREC-BackEnd/
+│
+├── main.py                        # Main execution logic (recording, booking, uploads)
+├── system_status.py               # Updates system status every 3 seconds
+├── deployment.sh                  # Script for deploying to /opt/ezrec-backend
+├── ezrec-backend.service          # Systemd service unit
+├── requirements.txt               # Dependencies (Picamera2, OpenCV, Supabase)
+├── .env                           # Supabase and config values
+```
+
+> ❌ No test or temporary scripts should exist.
+
+---
+
+## 📅 STEP-BY-STEP DEPLOYMENT GUIDE
+
+### Step 1: 🔍 Validate Supabase Tables & Schema
+
+Ensure the following:
+
+* ✅ `bookings` table exists and has unique, non-duplicated entries
+* ✅ `videos` table receives uploaded records with UUID reference and correct file URLs
+* ✅ System status fields are updated every 3 seconds (`system_status` or similar table)
+* ✅ No duplicate users or ghost entries in any table
+
+**Use Supabase SQL Editor** or `supabase-python` queries to verify.
+
+---
+
+### Step 2: 🔒 Ensure Camera Access is Exclusive
+
+Run on the Pi to check if any process uses the camera:
+
+```bash
+lsof /dev/video0
+```
+
+If other services like `libcamera`, `pipewire`, or `motion` are using it:
+
+```bash
+sudo systemctl disable --now pipewire wireplumber motion
+```
+
+Ensure your systemd service starts **before anything else** via dependencies:
+
+```ini
+[Unit]
+Before=graphical.target
+```
+
+---
+
+### Step 3: 🛠️ Code Modifications (If Needed)
+
+Before **any fix**:
+
+* ✔️ Validate existing file structure and Supabase schema
+* ✔️ Pull the latest code:
+
+```bash
+cd ~/code/EZREC-BackEnd
+git pull origin main
+```
+
+* ✔️ Modify `main.py` or related files only as needed
+* ✔️ Commit + push:
+
+```bash
+git add .
+git commit -m "Fix: [short description of what was changed]"
+git push origin main
+```
+
+---
+
+### Step 4: 📤 Deploy to `/opt/ezrec-backend`
+
+Use the deployment script to copy code:
+
+```bash
+# In deployment.sh
+#!/bin/bash
+
+echo "[INFO] Copying code to /opt/ezrec-backend..."
+sudo rm -rf /opt/ezrec-backend/*
+sudo cp -r ~/code/EZREC-BackEnd/* /opt/ezrec-backend/
+
+echo "[INFO] Restarting service..."
+sudo systemctl daemon-reload
+sudo systemctl restart ezrec-backend.service
+```
+
+Make sure it's executable:
+
+```bash
+chmod +x deployment.sh
+./deployment.sh
+```
+
+---
+
+### Step 5: 🧪 Post-Deployment Verification
+
+* Run:
+
+```bash
+sudo journalctl -u ezrec-backend.service -f
+```
+
+* Validate:
+
+  * System status updates every 3 seconds
+  * Recording starts/stops based on `bookings`
+  * `.mp4` video gets uploaded and deleted locally
+  * Supabase `videos` table receives correct entries
+
+---
+
+## 🧼 Clean-Up + Safety Practices
+
+* Always check `.env` is configured correctly with valid Supabase keys.
+* Prevent **system resource leaks** by confirming:
+
+  ```bash
+  ps aux | grep -i camera
+  ```
+
+---
+
+## 🧾 Summary
+
+| Requirement                             | Status |
+| --------------------------------------- | ------ |
+| Uses `Picamera2` only                   | ✅      |
+| GitHub push before any deployment       | ✅      |
+| Code pulls from `~/code/EZREC-BackEnd`  | ✅      |
+| Deploys to `/opt/ezrec-backend`         | ✅      |
+| No test or temp scripts in project      | ✅      |
+| Validates Supabase schema               | ✅      |
+| Deletes video after successful upload   | ✅      |
+| Status updates every 3 seconds          | ✅      |
+| Prevents other processes from using cam | ✅      |
+
+---
+
+Let me know if you want this saved as a `README.md` file or included in the repo!
