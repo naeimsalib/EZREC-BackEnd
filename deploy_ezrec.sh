@@ -82,7 +82,9 @@ protect_camera() {
 update_code() {
     print_status "Updating code from GitHub..."
     
-    cd $REPO_DIR
+    # Use absolute path and expand tilde
+    REPO_DIR_EXPANDED="/home/$SERVICE_USER/code/EZREC-BackEnd"
+    cd "$REPO_DIR_EXPANDED"
     
     # Stash any local changes
     git stash --include-untracked 2>/dev/null || true
@@ -112,16 +114,19 @@ deploy_code() {
     # Create deployment directory structure
     sudo mkdir -p $DEPLOY_DIR/{src,recordings,uploads,logs,temp}
     
+    # Use expanded path for copying
+    REPO_DIR_EXPANDED="/home/$SERVICE_USER/code/EZREC-BackEnd"
+    
     # Copy source files
-    sudo cp -r $REPO_DIR/src/* $DEPLOY_DIR/src/
+    sudo cp -r "$REPO_DIR_EXPANDED/src"/* $DEPLOY_DIR/src/
     
     # Copy essential files  
-    sudo cp $REPO_DIR/requirements.txt $DEPLOY_DIR/
-    sudo cp $REPO_DIR/ezrec-backend.service $DEPLOY_DIR/
+    sudo cp "$REPO_DIR_EXPANDED/requirements.txt" $DEPLOY_DIR/
+    sudo cp "$REPO_DIR_EXPANDED/ezrec-backend.service" $DEPLOY_DIR/
     
     # Copy migrations for reference
     sudo mkdir -p $DEPLOY_DIR/migrations
-    sudo cp -r $REPO_DIR/migrations/* $DEPLOY_DIR/migrations/ 2>/dev/null || true
+    sudo cp -r "$REPO_DIR_EXPANDED/migrations"/* $DEPLOY_DIR/migrations/ 2>/dev/null || true
     
     # Set proper ownership and permissions
     sudo chown -R $SERVICE_USER:$SERVICE_USER $DEPLOY_DIR
