@@ -129,7 +129,7 @@ htmlcov/
 # Split files (if any)
 part_*
 
-# Test files (but allow our camera test scripts)
+# Test files (but allow our camera test scripts and workflow tests)
 test_*.py
 *_test.py
 !test_camera_simple_fix.py
@@ -138,6 +138,8 @@ test_*.py
 !quick_camera_test.py
 !test_camera_direct.py
 !debug_camera.py
+!test_complete_workflow.py
+!quick_functionality_test.py
 
 # Backup files
 *.bak
