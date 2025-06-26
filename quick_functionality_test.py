@@ -42,7 +42,7 @@ def test_database_connection():
         today = datetime.datetime.now().strftime("%Y-%m-%d")
         config = Config()
         
-        filtered_bookings = supabase.client.table("bookings").select("*").eq("date", today).eq("user_id", config.user_id).execute()
+        filtered_bookings = supabase.client.table("bookings").select("*").eq("date", today).eq("user_id", config.USER_ID).execute()
         print(f"  ✅ Filtered booking query successful: {len(filtered_bookings.data)} bookings found")
         
         return True
@@ -60,7 +60,7 @@ def test_system_status():
         supabase = SupabaseManager()
         
         # Check system status table
-        status = supabase.client.table("system_status").select("*").eq("user_id", config.user_id).execute()
+        status = supabase.client.table("system_status").select("*").eq("user_id", config.USER_ID).execute()
         
         if status.data:
             last_update = status.data[0].get('updated_at', 'Unknown')

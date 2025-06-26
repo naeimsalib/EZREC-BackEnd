@@ -49,8 +49,8 @@ class EZRECWorkflowTester:
         print("🎬 EZREC Complete Workflow Tester")
         print("=" * 50)
         print(f"📅 Test Date: {datetime.datetime.now()}")
-        print(f"👤 User ID: {self.config.user_id}")
-        print(f"📹 Camera ID: {self.config.camera_id}")
+        print(f"👤 User ID: {self.config.USER_ID}")
+        print(f"📹 Camera ID: {self.config.CAMERA_ID}")
         print("")
 
     def create_test_booking(self, minutes_from_now=1, duration_minutes=2):
@@ -68,8 +68,8 @@ class EZRECWorkflowTester:
             "date": start_time.strftime("%Y-%m-%d"),
             "start_time": start_time.strftime("%H:%M:%S"),
             "end_time": end_time.strftime("%H:%M:%S"),
-            "user_id": self.config.user_id,
-            "camera_id": self.config.camera_id,
+            "user_id": self.config.USER_ID,
+            "camera_id": self.config.CAMERA_ID,
             "status": "confirmed",
             "created_at": now.isoformat(),
             "updated_at": now.isoformat()
@@ -198,7 +198,7 @@ class EZRECWorkflowTester:
                             recording_file_found = True
                 
                 # Check system status updates
-                system_status = self.supabase.client.table("system_status").select("*").eq("user_id", self.config.user_id).execute()
+                system_status = self.supabase.client.table("system_status").select("*").eq("user_id", self.config.USER_ID).execute()
                 if system_status.data:
                     last_update = system_status.data[0].get('updated_at', '')
                     if last_update:
@@ -264,7 +264,7 @@ class EZRECWorkflowTester:
         
         try:
             # Check videos table for our recording
-            videos = self.supabase.client.table("videos").select("*").eq("user_id", self.config.user_id).order("created_at", desc=True).limit(1).execute()
+            videos = self.supabase.client.table("videos").select("*").eq("user_id", self.config.USER_ID).order("created_at", desc=True).limit(1).execute()
             
             if videos.data:
                 latest_video = videos.data[0]
@@ -325,7 +325,7 @@ class EZRECWorkflowTester:
         
         try:
             # Check system status updates over 15 seconds
-            initial_status = self.supabase.client.table("system_status").select("*").eq("user_id", self.config.user_id).execute()
+            initial_status = self.supabase.client.table("system_status").select("*").eq("user_id", self.config.USER_ID).execute()
             
             if not initial_status.data:
                 print("  ❌ No system status record found")
@@ -338,7 +338,7 @@ class EZRECWorkflowTester:
             update_count = 0
             for i in range(5):  # Check 5 times over 15 seconds
                 time.sleep(3)
-                current_status = self.supabase.client.table("system_status").select("*").eq("user_id", self.config.user_id).execute()
+                current_status = self.supabase.client.table("system_status").select("*").eq("user_id", self.config.USER_ID).execute()
                 
                 if current_status.data:
                     current_time = current_status.data[0].get('updated_at')
