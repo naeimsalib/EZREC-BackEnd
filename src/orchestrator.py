@@ -228,12 +228,14 @@ class EZRECOrchestrator:
         try:
             now = datetime.now()
             booking_date = datetime.strptime(booking['date'], '%Y-%m-%d').date()
-            booking_start = datetime.strptime(booking['start_time'], '%H:%M:%S').time()
+            booking_start = datetime.strptime(booking['start_time'], '%H:%M').time()
             
             booking_datetime = datetime.combine(booking_date, booking_start)
             
             # Start recording if we're within 30 seconds of start time
             time_diff = (booking_datetime - now).total_seconds()
+            
+            self.logger.info(f"🕐 Booking {booking['id']}: {booking_datetime}, Time diff: {time_diff}s")
             
             return (-30 <= time_diff <= 30) and not self.recording_active
             
@@ -246,7 +248,7 @@ class EZRECOrchestrator:
         try:
             now = datetime.now()
             booking_date = datetime.strptime(booking['date'], '%Y-%m-%d').date()
-            booking_end = datetime.strptime(booking['end_time'], '%H:%M:%S').time()
+            booking_end = datetime.strptime(booking['end_time'], '%H:%M').time()
             
             booking_end_datetime = datetime.combine(booking_date, booking_end)
             
