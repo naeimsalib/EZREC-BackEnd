@@ -37,7 +37,7 @@ def setup_logging():
         return logger
     
     # Ensure log directory exists
-    os.makedirs(LOG_DIR, exist_ok=True)
+    os.makedirs(LOGS_DIR, exist_ok=True)
     
     # Create logger
     logger = logging.getLogger('ezrec')
@@ -49,9 +49,9 @@ def setup_logging():
     
     # File handler with rotation
     file_handler = logging.handlers.RotatingFileHandler(
-        os.path.join(LOG_DIR, 'ezrec.log'),
-        maxBytes=LOG_MAX_BYTES,
-        backupCount=LOG_BACKUP_COUNT
+        os.path.join(LOGS_DIR, 'ezrec.log'),
+        maxBytes=10*1024*1024,  # 10MB
+        backupCount=5
     )
     file_handler.setFormatter(logging.Formatter(
         '%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s'
@@ -72,7 +72,7 @@ def setup_logging():
     logger.info("EZREC Backend Logging Initialized - FIXED VERSION")
     logger.info(f"Log Level: {LOG_LEVEL}")
     logger.info(f"Debug Mode: {DEBUG}")
-    logger.info(f"Log Directory: {LOG_DIR}")
+    logger.info(f"Log Directory: {LOGS_DIR}")
     logger.info("="*60)
     
     return logger
@@ -85,7 +85,7 @@ try:
     from supabase import create_client, Client
     
     # Create client - check for both service role and anon keys
-    supabase_key = os.getenv('SUPABASE_SERVICE_ROLE_KEY') or os.getenv('SUPABASE_ANON_KEY') or SUPABASE_KEY
+    supabase_key = os.getenv('SUPABASE_SERVICE_ROLE_KEY') or os.getenv('SUPABASE_ANON_KEY') or SUPABASE_ANON_KEY
     supabase: Client = create_client(SUPABASE_URL, supabase_key)
     
     logger.info("Supabase client initialized successfully")
@@ -161,8 +161,8 @@ def upload_video_to_supabase(video_path: str, booking_id: str = None) -> Dict[st
         
         # Create storage client
         headers = {
-            "apiKey": os.getenv('SUPABASE_ANON_KEY', SUPABASE_KEY),
-            "Authorization": f"Bearer {os.getenv('SUPABASE_SERVICE_ROLE_KEY', SUPABASE_KEY)}"
+            "apiKey": os.getenv('SUPABASE_ANON_KEY', SUPABASE_ANON_KEY),
+            "Authorization": f"Bearer {os.getenv('SUPABASE_SERVICE_ROLE_KEY', SUPABASE_ANON_KEY)}"
         }
         
         storage_url = f"{SUPABASE_URL}/storage/v1"
