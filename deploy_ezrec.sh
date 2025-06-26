@@ -124,6 +124,29 @@ verify_venv() {
     print_success "Virtual environment ready"
 }
 
+# Function to apply critical database migrations
+apply_database_migrations() {
+    print_status "Applying critical database migrations..."
+    
+    # Check if migration 007 (RLS fix) needs to be applied
+    MIGRATION_DIR="$REPO_DIR/migrations"
+    RLS_MIGRATION="$MIGRATION_DIR/007_fix_rls_anonymous_access.sql"
+    
+    if [[ -f "$RLS_MIGRATION" ]]; then
+        print_status "Found RLS migration file - ensuring anonymous access is enabled..."
+        
+        # Copy migration to deployment directory for reference
+        sudo mkdir -p $DEPLOY_DIR/migrations
+        sudo cp $MIGRATION_DIR/*.sql $DEPLOY_DIR/migrations/ 2>/dev/null || true
+        
+        print_success "Database migrations copied"
+        print_warning "🔐 CRITICAL: Ensure RLS policies allow anonymous access to bookings table"
+        print_warning "If system shows '0 results', apply migration 007 via Supabase dashboard"
+    else
+        print_warning "RLS migration file not found - may need manual application"
+    fi
+}
+
 # Function to verify configuration
 verify_config() {
     print_status "Verifying configuration..."
@@ -219,6 +242,11 @@ show_summary() {
     echo "  ✅ Supabase integration with proper error handling"
     echo "  ✅ Automatic booking lifecycle management"
     echo "  ✅ System status monitoring every 3 seconds"
+    echo "  🔐 RLS migration 007 for anonymous access (critical for booking detection)"
+    echo ""
+    echo "🚨 CRITICAL RLS NOTICE:"
+    echo "  If system shows '0 results', run: ./fix_supabase_query_parsing.sh"
+    echo "  This fixes Row Level Security policies that block anonymous API access"
     echo ""
     echo "📋 Useful Commands:"
     echo "  Monitor logs: sudo journalctl -u $SERVICE_NAME -f --no-pager"
@@ -244,6 +272,7 @@ main() {
     deploy_code
     clean_cache
     verify_venv
+    apply_database_migrations
     verify_config
     start_service
     
