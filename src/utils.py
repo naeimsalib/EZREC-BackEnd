@@ -468,14 +468,14 @@ class SupabaseManager:
                     response = self.client.table("system_status").select("*").execute()
                     return response.data
                 else:
-                    logger.warning(f"Unsupported query format: {query}")
+                    logger.warning(f"❌ Unsupported query format: {query}")
                     return []
             else:
-                logger.warning(f"Only SELECT queries supported, got:\n            {query}\n            ")
+                logger.warning(f"❌ Only SELECT queries supported. Received: {query}")
                 return []
                 
         except Exception as e:
-            logger.error(f"Query execution failed: {e}")
+            logger.error(f"❌ Query execution failed: {e}")
             raise
     
     async def insert_booking(self, booking_data: Dict[str, Any]):
