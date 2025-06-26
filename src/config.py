@@ -43,12 +43,12 @@ def get_env_var(name: str, default=None, required=False, var_type=str):
 BASE_DIR = Path(get_env_var("EZREC_BASE_DIR", "/opt/ezrec-backend"))
 TEMP_DIR = BASE_DIR / "temp"
 UPLOAD_DIR = BASE_DIR / "uploads"
-LOG_DIR = BASE_DIR / "logs"
-RECORDING_DIR = BASE_DIR / "recordings"
+LOGS_DIR = BASE_DIR / "logs"
+RECORDINGS_DIR = BASE_DIR / "recordings"
 ASSETS_DIR = BASE_DIR / "user_assets"
 
 # Create directories if they don't exist (with error handling for permissions)
-for directory in [TEMP_DIR, UPLOAD_DIR, LOG_DIR, RECORDING_DIR, ASSETS_DIR]:
+for directory in [TEMP_DIR, UPLOAD_DIR, LOGS_DIR, RECORDINGS_DIR, ASSETS_DIR]:
     try:
         directory.mkdir(parents=True, exist_ok=True)
     except PermissionError:
@@ -60,7 +60,8 @@ for directory in [TEMP_DIR, UPLOAD_DIR, LOG_DIR, RECORDING_DIR, ASSETS_DIR]:
 
 # Supabase Configuration (Required)
 SUPABASE_URL = get_env_var("SUPABASE_URL", required=True)
-SUPABASE_KEY = get_env_var("SUPABASE_SERVICE_ROLE_KEY") or get_env_var("SUPABASE_SERVICE_KEY", required=True)
+SUPABASE_ANON_KEY = get_env_var("SUPABASE_ANON_KEY") or get_env_var("SUPABASE_KEY", required=True)
+SUPABASE_SERVICE_ROLE_KEY = get_env_var("SUPABASE_SERVICE_ROLE_KEY")
 
 # User Configuration (Required)
 USER_ID = get_env_var("USER_ID", required=True)
@@ -126,8 +127,8 @@ def validate_config():
     
     if not SUPABASE_URL:
         errors.append("SUPABASE_URL is required")
-    if not SUPABASE_KEY:
-        errors.append("SUPABASE_SERVICE_ROLE_KEY is required")
+    if not SUPABASE_ANON_KEY:
+        errors.append("SUPABASE_ANON_KEY is required")
     if not USER_ID:
         errors.append("USER_ID is required")
     
@@ -165,13 +166,14 @@ class Config:
     BASE_DIR = BASE_DIR
     TEMP_DIR = TEMP_DIR
     UPLOAD_DIR = UPLOAD_DIR
-    LOG_DIR = LOG_DIR
-    RECORDING_DIR = RECORDING_DIR
+    LOGS_DIR = LOGS_DIR
+    RECORDINGS_DIR = RECORDINGS_DIR
     ASSETS_DIR = ASSETS_DIR
     
     # Supabase
     SUPABASE_URL = SUPABASE_URL
-    SUPABASE_KEY = SUPABASE_KEY
+    SUPABASE_ANON_KEY = SUPABASE_ANON_KEY
+    SUPABASE_SERVICE_ROLE_KEY = SUPABASE_SERVICE_ROLE_KEY
     
     # User
     USER_ID = USER_ID
