@@ -1,6 +1,6 @@
 [Unit]
-Description=EZREC Backend Orchestrator Service
-Documentation=https://github.com/yourusername/EZREC-BackEnd
+Description=EZREC Backend Service - Soccer Recording System
+Documentation=https://github.com/naeimsalib/EZREC-BackEnd
 After=network-online.target
 Wants=network-online.target
 StartLimitIntervalSec=60
@@ -8,14 +8,19 @@ StartLimitBurst=3
 
 [Service]
 Type=simple
-User=ezrec
-Group=ezrec
+User=michomanoly14892
+Group=michomanoly14892
 WorkingDirectory=/opt/ezrec-backend
-ExecStart=/opt/ezrec-backend/venv/bin/python /opt/ezrec-backend/src/orchestrator.py
+ExecStartPre=/bin/bash -c 'echo "🛡️ Protecting camera for EZREC..."'
+ExecStartPre=/bin/bash -c 'sudo fuser -k /dev/video0 2>/dev/null || true'
+ExecStartPre=/bin/bash -c 'sudo fuser -k /dev/video1 2>/dev/null || true'
+ExecStartPre=/bin/bash -c 'sudo fuser -k /dev/video2 2>/dev/null || true'
+ExecStartPre=/bin/bash -c 'echo "✅ Camera protection active"'
+ExecStart=/opt/ezrec-backend/venv/bin/python3 main.py
 ExecReload=/bin/kill -USR1 $MAINPID
 
 # Environment
-Environment=PYTHONPATH=/opt/ezrec-backend/src
+Environment=PYTHONPATH=/opt/ezrec-backend
 EnvironmentFile=-/opt/ezrec-backend/.env
 
 # Security settings
