@@ -168,6 +168,15 @@ secrets.txt
 *_backup*
 *_old*
 
+# Temporary debugging and diagnostic scripts (keep only essential ones)
+debug_*.py
+test_auth.py
+*_diagnostics.py
+fix_*_issue.sh
+fix_*_deployment.sh
+fix_libcamera*.sh
+fix_picamera*.sh
+
 # IDE and editor files
 .vscode/
 .idea/

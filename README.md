@@ -82,19 +82,19 @@ EZREC automatically works with these Supabase tables:
 ### Check Status & Recordings
 
 ```bash
-./check_recordings.sh                    # Complete status check
 sudo systemctl status ezrec-backend      # Service status
 sudo journalctl -u ezrec-backend -f      # Live logs
 ls -la /opt/ezrec-backend/recordings/    # View recordings
+./deploy_ezrec.sh status                 # Quick status check
 ```
 
 ### Troubleshooting
 
 ```bash
-./camera_diagnostic.py                   # Camera diagnostics
-./debug_camera_bookings.py              # Booking detection debug
-./verify_installation.sh                # Full system check
-./restart_ezrec.sh                      # Service restart
+./fix_supabase_query_parsing.sh         # Fix RLS/booking detection issues
+./deploy_ezrec.sh restart               # Restart service
+./deploy_ezrec.sh logs                  # Show live logs
+./deploy_ezrec.sh clean                 # Clean cache and restart
 ```
 
 ### System Snapshot (for replication)
@@ -155,68 +155,42 @@ STATUS_UPDATE_INTERVAL=10  # Dashboard update frequency
 
 ```bash
 sudo journalctl -u ezrec-backend --no-pager
-./verify_installation.sh
+./deploy_ezrec.sh                        # Complete reinstallation
 ```
 
-**Camera not detected:**
+**No bookings detected (shows "0 results"):**
 
 ```bash
-./camera_diagnostic.py
-# Check camera connections and permissions
+./fix_supabase_query_parsing.sh          # Fix Row Level Security policies
+# Follow the instructions to apply the RLS migration in Supabase
 ```
 
-**No bookings detected:**
+**General issues:**
 
 ```bash
-./debug_camera_bookings.py
-# Verify Supabase connection and camera_id matching
-```
-
-**Permission errors:**
-
-```bash
-sudo ./fix_camera_issues.sh
-# Fixes camera access and WirePlumber conflicts
-```
-
-### Expert Recovery
-
-```bash
-# Complete reinstallation
-sudo ./deploy_ezrec.sh
-
-# Virtual environment issues
-sudo ./fix_picamera2_venv.sh
-
-# Supabase compatibility
-sudo ./fix_supabase_compatibility.sh
+./deploy_ezrec.sh restart               # Restart service
+./deploy_ezrec.sh clean                 # Clean cache and restart
+./deploy_ezrec.sh                       # Complete redeployment
 ```
 
 ## 📁 Project Structure
 
 ```
 EZREC-BackEnd/
-├── 🚀 deploy_ezrec.sh              # One-command installer
-├── 📊 check_recordings.sh          # Status checker
-├── 📸 system_snapshot.sh           # System replication
-├── 🔧 Installation Scripts/
-│   ├── install_ezrec.sh            # Core installation
-│   ├── setup_pi_env.sh             # Pi environment setup
-│   └── create_env_file.sh          # Environment configuration
-├── 🛠️ Diagnostic Tools/
-│   ├── camera_diagnostic.py        # Camera troubleshooting
-│   ├── debug_camera_bookings.py    # Booking detection debug
-│   └── verify_installation.sh      # Full system verification
-├── 🔧 Fix Scripts/
-│   ├── fix_camera_issues.sh        # Camera access fixes
-│   ├── fix_picamera2_venv.sh       # Virtual environment fixes
-│   └── fix_supabase_compatibility.sh # Database compatibility
-├── 📁 src/                         # Core application code
-├── 📁 migrations/                  # Database migrations
-└── 📋 Documentation/
-    ├── README.md                   # This file
-    ├── CAMERA_TROUBLESHOOTING.md   # Camera-specific help
-    └── requirements.txt            # Python dependencies
+├── 🚀 deploy_ezrec.sh              # Main deployment script
+├── 🔐 fix_supabase_query_parsing.sh # RLS troubleshooting script
+├── 📋 ezrec-backend.service         # Systemd service file
+├── 📄 requirements.txt              # Python dependencies
+├── 🗂️ src/                         # Core application source
+│   ├── orchestrator.py             # Main recording logic
+│   ├── camera_interface.py         # Camera management
+│   ├── camera.py                   # Camera implementation
+│   ├── utils.py                    # Supabase & utility functions
+│   ├── config.py                   # Configuration management
+│   └── find_camera.py              # Camera detection
+└── 🗃️ migrations/                  # Database migrations
+    ├── 002-006_*.sql               # Schema migrations
+    └── 007_fix_rls_anonymous_access.sql # Critical RLS fix
 ```
 
 ## 🔗 Related Projects
