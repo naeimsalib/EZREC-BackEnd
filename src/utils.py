@@ -21,9 +21,8 @@ import cv2
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from config import (
-    SUPABASE_URL, SUPABASE_KEY, USER_ID, LOG_DIR, TEMP_DIR, 
-    RECORDING_DIR, CAMERA_ID, LOG_MAX_BYTES, LOG_BACKUP_COUNT,
-    LOG_LEVEL, DEBUG
+    SUPABASE_URL, SUPABASE_ANON_KEY, USER_ID, LOGS_DIR, TEMP_DIR,
+    RECORDINGS_DIR, CAMERA_ID, DEBUG, LOG_LEVEL
 )
 
 # Global logger instance
